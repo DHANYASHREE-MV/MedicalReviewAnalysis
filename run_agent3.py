@@ -41,10 +41,12 @@ with engine.begin() as conn:
             timeline VARCHAR(100),
 
             success_metrics TEXT,
+            confidence DOUBLE PRECISION,
 
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """))
+    conn.execute(text("ALTER TABLE action_plans ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION"))
 
 
 # ============================================================
@@ -140,7 +142,8 @@ for index, row in enumerate(analyses, start=1):
                         preventive_actions,
                         owner_role,
                         timeline,
-                        success_metrics
+                        success_metrics,
+                        confidence
                     )
 
                     VALUES (
@@ -152,7 +155,8 @@ for index, row in enumerate(analyses, start=1):
                         :preventive_actions,
                         :owner_role,
                         :timeline,
-                        :success_metrics
+                        :success_metrics,
+                        :confidence
                     )
 
                     ON CONFLICT (review_id)
@@ -179,7 +183,8 @@ for index, row in enumerate(analyses, start=1):
                             EXCLUDED.timeline,
 
                         success_metrics =
-                            EXCLUDED.success_metrics
+                            EXCLUDED.success_metrics,
+                        confidence = EXCLUDED.confidence
                 """),
 
                 {
@@ -205,7 +210,14 @@ for index, row in enumerate(analyses, start=1):
                         result.timeline,
 
                     "success_metrics":
-                        result.success_metrics
+                        result.success_metrics,
+                    "confidence": round(min(0.95, max(0.05,
+                        0.35 * (sum(bool(str(v or "").strip()) for v in [
+                            result.objective, result.immediate_actions, result.corrective_actions,
+                            result.preventive_actions, result.owner_role, result.timeline,
+                            result.success_metrics]) / 7.0)
+                        + 0.65 * max(0.0, min(1.0, float(row.confidence or 0)))
+                    )), 2)
                 }
             )
 
