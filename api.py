@@ -3,13 +3,18 @@ import re
 import json
 import smtplib
 from email.message import EmailMessage
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlencode
+import secrets
+import urllib.request
+import urllib.error
 
 from playwright.sync_api import sync_playwright
 
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -35,19 +40,248 @@ engine = create_engine(DB_URI)
 
 app = FastAPI(title="AegisCare API")
 
+# ============================================================
+# CONFIG: CORS + SESSION + GOOGLE OAUTH
+# ============================================================
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback")
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-only-change-me")
+
+# With allow_credentials=True the browser REJECTS allow_origins=["*"],
+# so list the real frontend origins explicitly.
+_default_origins = {FRONTEND_URL, "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"}
+_extra = [o.strip().rstrip("/") for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+ALLOWED_ORIGINS = sorted(_default_origins | set(_extra))
+
 app.add_middleware(
-
     CORSMiddleware,
-
-    allow_origins=["*"],
-
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-
     allow_methods=["*"],
-
     allow_headers=["*"],
-
 )
+
+# Signed session cookie (needs: pip install itsdangerous)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="aegis_session",
+    max_age=60 * 60 * 24 * 7,
+    same_site="lax",
+    https_only=False,  # set True in production (HTTPS)
+)
+
+# ============================================================
+# AUTH (Google OAuth 2.0)
+# ============================================================
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+def _http_json(url: str, data: dict | None = None, headers: dict | None = None) -> dict:
+    body = urlencode(data).encode() if data is not None else None
+    req = urllib.request.Request(url, data=body, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode())
+
+
+
+ROLES = {"patient", "doctor", "organization"}
+
+
+def ensure_schema() -> None:
+    """Idempotent: user table with the 'Who are you?' profile fields."""
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS app_users (
+                google_sub TEXT PRIMARY KEY,
+                email TEXT, name TEXT, picture TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                last_login_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        for col, ddl in [
+            ("role", "TEXT"), ("org_name", "TEXT"), ("org_type", "TEXT"),
+            ("designation", "TEXT"), ("specialty", "TEXT"), ("city", "TEXT"),
+            ("onboarded", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ]:
+            conn.execute(text(f"ALTER TABLE app_users ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    try:
+        ensure_schema()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] schema setup failed: {exc}")
+
+
+def _save_user(user: dict) -> None:
+    """Create/update the user row (identity only; profile fields are untouched)."""
+    try:
+        ensure_schema()
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO app_users (google_sub, email, name, picture)
+                VALUES (:sub, :email, :name, :picture)
+                ON CONFLICT (google_sub) DO UPDATE
+                SET email = EXCLUDED.email, name = EXCLUDED.name,
+                    picture = EXCLUDED.picture, last_login_at = NOW()
+            """), user)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[auth] could not save user: {exc}")
+
+
+def _load_profile(sub: str) -> dict:
+    empty = {"role": "", "org_name": "", "org_type": "", "designation": "",
+             "specialty": "", "city": "", "onboarded": False}
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT role, org_name, org_type, designation, specialty, city, onboarded
+                FROM app_users WHERE google_sub = :sub
+            """), {"sub": sub}).mappings().first()
+        if not row:
+            return empty
+        return {k: (row[k] or "") if k != "onboarded" else bool(row[k]) for k in empty}
+    except Exception as exc:  # noqa: BLE001
+        print(f"[auth] could not load profile: {exc}")
+        return empty
+
+
+def _session_user(request: Request) -> dict:
+    sess = request.session.get("user")
+    if not sess or not sess.get("sub"):
+        raise HTTPException(status_code=401, detail="Please sign in.")
+    return sess
+
+
+def _me_payload(sess: dict) -> dict:
+    profile = _load_profile(sess["sub"])
+    return {
+        "signed_in": True,
+        "email": sess.get("email", ""),
+        "onboarded": profile["onboarded"],
+        "role": profile["role"],
+        "profile": profile,
+        "user": {
+            "email": sess.get("email", ""), "name": sess.get("name", ""),
+            "picture": sess.get("picture", ""), "business_profile_connected": False,
+        },
+    }
+
+
+def _fail(reason: str) -> RedirectResponse:
+    return RedirectResponse(f"{FRONTEND_URL}/?google_auth=error&reason={quote_plus(reason)}")
+
+
+@app.get("/api/auth/google/start")
+def google_start(request: Request, mode: str = "login"):
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=500,
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.",
+        )
+    state = secrets.token_urlsafe(24)
+    request.session["oauth_state"] = state
+    request.session["oauth_mode"] = mode
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    }
+    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
+
+
+@app.get("/api/auth/google/callback")
+def google_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    if error:
+        return _fail(error)
+    expected = request.session.pop("oauth_state", None)
+    if not code or not expected or not secrets.compare_digest(state, expected):
+        return _fail("invalid_state")
+    try:
+        token = _http_json(GOOGLE_TOKEN_URL, data={
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        })
+        info = _http_json(
+            GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {token['access_token']}"},
+        )
+    except (urllib.error.URLError, KeyError, ValueError) as exc:
+        print(f"[auth] Google token exchange failed: {exc}")
+        return _fail("token_exchange_failed")
+
+    user = {
+        "sub": info.get("sub", ""),
+        "email": info.get("email", ""),
+        "name": info.get("name", ""),
+        "picture": info.get("picture", ""),
+    }
+    if not user["sub"]:
+        return _fail("no_profile")
+    _save_user(user)
+    request.session["user"] = user
+    return RedirectResponse(f"{FRONTEND_URL}/?google_auth=success")
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    if not request.session.get("user"):
+        return {"signed_in": False}
+    return _me_payload(request.session["user"])
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    request.session.clear()
+    return {"signed_out": True}
+
+
+class ProfilePayload(BaseModel):
+    role: str
+    org_name: str = Field(default="", max_length=160)
+    org_type: str = Field(default="", max_length=60)
+    designation: str = Field(default="", max_length=120)
+    specialty: str = Field(default="", max_length=120)
+    city: str = Field(default="", max_length=120)
+
+
+@app.post("/api/profile")
+def save_profile(payload: ProfilePayload, request: Request):
+    """'Who are you?' step after first sign-in (also used for later edits)."""
+    sess = _session_user(request)
+    role = payload.role.strip().lower()
+    if role not in ROLES:
+        raise HTTPException(status_code=422, detail="Choose patient, doctor, or organization.")
+    data = {k: v.strip() for k, v in payload.dict().items()}
+    if role == "doctor" and not data["specialty"]:
+        raise HTTPException(status_code=422, detail="Enter your specialty.")
+    if role == "doctor" and not data["org_name"]:
+        raise HTTPException(status_code=422, detail="Enter the hospital or clinic you practise at.")
+    if role == "organization" and not data["org_name"]:
+        raise HTTPException(status_code=422, detail="Enter your organization's name.")
+    ensure_schema()
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE app_users
+            SET role=:role, org_name=:org_name, org_type=:org_type, designation=:designation,
+                specialty=:specialty, city=:city, onboarded=TRUE
+            WHERE google_sub=:sub
+        """), {**data, "role": role, "sub": sess["sub"]})
+    return _me_payload(sess)
+
 
 # ============================================================
 

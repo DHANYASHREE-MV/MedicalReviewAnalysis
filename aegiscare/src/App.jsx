@@ -352,6 +352,8 @@ function getTotal(payload, fallback = 0) {
   return rows.length || fallback;
 }
 
+const apiFetch = (url, opts = {}) => fetch(url, { credentials: "include", ...opts });
+
 async function fetchJson(url) {
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
@@ -951,7 +953,7 @@ function GoogleLogin({apiBaseUrl=API.baseUrl,go,signedIn,email}){
     <div style={{fontSize:34,marginBottom:10}} aria-hidden="true">✦</div>
     <p className="n" style={{letterSpacing:".12em"}}>WELCOME TO AEGISCARE AI</p>
     <h1 style={{fontSize:32,margin:"10px 0"}}>Sign in</h1>
-    <p className="muted" style={{lineHeight:1.7,marginBottom:24}}>Continue with your Google account to access the AegisCare dashboard. New users are registered automatically.</p>
+    <p className="muted" style={{lineHeight:1.7,marginBottom:24}}>Continue with your Google account. New users are asked a few quick details (who they are, city, organization) before the dashboard.</p>
     {signedIn ? <><p className="chip approved" style={{display:"inline-block"}}>Signed in{email?` as ${email}`:""}</p><div style={{marginTop:20}}><button className="btn pri" onClick={()=>go("dashboard")}>Go to dashboard →</button></div></> : <div style={{display:"flex",flexDirection:"column",alignItems:"stretch",gap:12,maxWidth:340,margin:"0 auto"}}>
       <button className="btn pri" onClick={()=>startGoogleAuth("login")} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:10,padding:"12px 20px",minHeight:46}}>
         <span aria-hidden="true" style={{fontWeight:700,fontSize:18}}>G</span> Continue with Google
@@ -1800,6 +1802,106 @@ function Contact(){
   </>;
 }
 
+/* --------------------------- accounts & roles --------------------------- */
+const ROLE_LABEL = { patient:"Patient", doctor:"Doctor", organization:"Organization" };
+const ROLE_OPTIONS = [
+  { key:"patient", title:"Patient", desc:"I want to understand hospital and doctor reviews before choosing care." },
+  { key:"doctor", title:"Doctor", desc:"I want to see what patients say about me and my clinic." },
+  { key:"organization", title:"Organization", desc:"I represent a hospital, clinic or health group and manage patient feedback." },
+];
+const ORG_TYPES = ["Hospital","Clinic","Hospital group / chain","Diagnostic centre","Other"];
+const EMPTY_AUTH = { signedIn:false, email:"", name:"", picture:"", businessConnected:false, onboarded:false, role:"", profile:{}, isAdmin:false };
+
+function mapAuth(data){
+  const user = data?.user || {};
+  return {
+    signedIn: !!data?.signed_in,
+    email: data?.email || user.email || "",
+    name: user.name || data?.name || "",
+    picture: user.picture || data?.picture || "",
+    businessConnected: !!(data?.business_profile_connected || user.business_profile_connected),
+    onboarded: !!data?.onboarded,
+    role: data?.role || "",
+    profile: data?.profile || {},
+    isAdmin: !!data?.is_admin,
+  };
+}
+
+function Onboarding({apiBaseUrl=API.baseUrl, auth, go, onSaved}){
+  const p = auth?.profile || {};
+  const editing = !!auth?.onboarded;
+  const [role,setRole] = useState(p.role || "");
+  const [form,setForm] = useState({ org_name:p.org_name||"", org_type:p.org_type||"", designation:p.designation||"", specialty:p.specialty||"", city:p.city||"" });
+  const [busy,setBusy] = useState(false);
+  const [err,setErr] = useState("");
+  const set = (k,v) => setForm(f => ({...f,[k]:v}));
+  const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/,"");
+
+  const submit = async () => {
+    setErr("");
+    if(!role){ setErr("Choose who you are to continue."); return; }
+    if(role==="doctor" && !form.specialty.trim()){ setErr("Enter your specialty."); return; }
+    if(role==="doctor" && !form.org_name.trim()){ setErr("Enter the hospital or clinic you practise at."); return; }
+    if(role==="organization" && !form.org_name.trim()){ setErr("Enter your organization's name."); return; }
+    const payload = role==="patient" ? { role, city:form.city }
+      : role==="doctor" ? { role, specialty:form.specialty, org_name:form.org_name, city:form.city }
+      : { role, org_name:form.org_name, org_type:form.org_type, designation:form.designation, city:form.city };
+    setBusy(true);
+    try{
+      const res = await apiFetch(`${base}/profile`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Could not save your profile (${res.status}).`);
+      onSaved(data);
+    }catch(e){ setErr(e.message || "Could not save your profile."); }
+    finally{ setBusy(false); }
+  };
+
+  const field = (id,label,key,placeholder) => <div className="field" style={{textAlign:"left"}}>
+    <label className="fl" htmlFor={id}>{label}</label>
+    <input id={id} className="f" value={form[key]} onChange={e=>set(key,e.target.value)} placeholder={placeholder} style={{width:"100%",boxSizing:"border-box"}}/>
+  </div>;
+
+  return <section className="panel" style={{maxWidth:640,margin:"40px auto",padding:32}}>
+    <p className="n" style={{letterSpacing:".12em",textAlign:"center"}}>{editing ? "YOUR PROFILE" : "ONE LAST STEP"}</p>
+    <h1 style={{fontSize:30,margin:"10px 0",textAlign:"center"}}>{editing ? "Edit your profile" : `Welcome${auth?.name ? ", " + auth.name.split(" ")[0] : ""}. Who are you?`}</h1>
+    <p className="muted" style={{lineHeight:1.7,textAlign:"center",marginBottom:22}}>We use this to set up a dashboard that fits you. Everything you analyse stays in your own account.</p>
+
+    <div style={{display:"grid",gap:12,marginBottom:22}} role="radiogroup" aria-label="I am a">
+      {ROLE_OPTIONS.map(o => <button key={o.key} type="button" role="radio" aria-checked={role===o.key} onClick={()=>setRole(o.key)}
+        style={{textAlign:"left",padding:"14px 16px",borderRadius:12,cursor:"pointer",color:"var(--text)",background:"var(--surface)",
+          border: role===o.key ? "2px solid var(--brand)" : "1px solid var(--line)"}}>
+        <div style={{fontWeight:600,fontSize:16}}>{o.title}</div>
+        <div className="small muted" style={{marginTop:3}}>{o.desc}</div>
+      </button>)}
+    </div>
+
+    {role && <div style={{display:"grid",gap:14}}>
+      {role==="doctor" && <>
+        {field("ob-specialty","Specialty","specialty","e.g. Cardiology")}
+        {field("ob-clinic","Hospital / clinic you practise at","org_name","e.g. Apollo Clinic")}
+      </>}
+      {role==="organization" && <>
+        {field("ob-org","Organization name","org_name","e.g. City Care Hospitals")}
+        <div className="field" style={{textAlign:"left"}}>
+          <label className="fl" htmlFor="ob-orgtype">Organization type</label>
+          <select id="ob-orgtype" className="f" value={form.org_type} onChange={e=>set("org_type",e.target.value)} style={{width:"100%",boxSizing:"border-box"}}>
+            <option value="">Select type (optional)</option>
+            {ORG_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        {field("ob-designation","Your role in the organization","designation","e.g. Head of Patient Experience")}
+      </>}
+      {field("ob-city","City (optional)","city","e.g. New Delhi")}
+    </div>}
+
+    {err && <p role="alert" style={{color:"var(--crit)",margin:"16px 0 0"}}>{err}</p>}
+    <div style={{display:"flex",gap:10,justifyContent:"center",marginTop:24}}>
+      {editing && <button className="btn" onClick={()=>go("dashboard")} disabled={busy}>Cancel</button>}
+      <button className="btn pri" onClick={submit} disabled={busy} style={{minWidth:180}}>{busy ? "Saving…" : editing ? "Save changes" : "Continue to dashboard →"}</button>
+    </div>
+  </section>;
+}
+
 /* -------------------------------- app -------------------------------- */
 const NAV = [
   ["Overview",[["home","Home","home"],["dashboard","Dashboard","dash"],["try","Try It","flask"]]],
@@ -1812,7 +1914,8 @@ const DEFAULTS = { org:"Your Hospital Group", email:"", theme:"system", threshol
 
 function App(){
   const [page,setPage] = useState("home");
-  const [googleAuth,setGoogleAuth] = useState({signedIn:false,email:"",name:"",picture:"",businessConnected:false});
+  const [googleAuth,setGoogleAuth] = useState(EMPTY_AUTH);
+  const [authChecked,setAuthChecked] = useState(false);
   const [reviews,setReviews] = useState([]);
   const [actionPlans,setActionPlans] = useState([]);
   const [sel,setSel] = useState("");
@@ -1848,6 +1951,11 @@ function App(){
       window.history.replaceState({}, document.title, window.location.pathname);
       setToastMsg("Google sign-in successful");
     }
+    if (params.get("google_auth") === "error") {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setToastMsg("Google sign-in failed: " + (params.get("reason") || "unknown error"));
+      setPage("login");
+    }
 
     fetch(base + "/auth/me", {credentials:"include"})
       .then(r => {
@@ -1855,18 +1963,12 @@ function App(){
         return r.json();
       })
       .then(data => {
-        const user = data?.user || {};
-        const auth = {
-          signedIn: !!data?.signed_in,
-          email: data?.email || user.email || "",
-          name: user.name || data?.name || "",
-          picture: user.picture || data?.picture || "",
-          businessConnected: !!(data?.business_profile_connected || user.business_profile_connected),
-        };
+        const auth = mapAuth(data);
         setGoogleAuth(auth);
-        // Successful OAuth return always opens the dashboard. Also recover if
-        // the session is already valid but the callback flag was lost.
-        if (returnedFromGoogle) {
+        // First sign-in: ask "Who are you?" before the dashboard. Returning users skip it.
+        if (auth.signedIn && !auth.onboarded) {
+          setPage("onboarding");
+        } else if (returnedFromGoogle) {
           setPage(auth.signedIn ? "dashboard" : "login");
         } else if (auth.signedIn) {
           setPage(current => current === "login" ? "dashboard" : current);
@@ -1874,14 +1976,22 @@ function App(){
       })
       .catch(() => {
         if (returnedFromGoogle) setPage("login");
-      });
+      })
+      .finally(() => setAuthChecked(true));
   },[settings.api]);
 
   // If the session is confirmed while the login view is open, move directly
   // to the dashboard rather than leaving the user on the sign-in screen.
   useEffect(()=>{
-    if (googleAuth.signedIn && page === "login") setPage("dashboard");
-  },[googleAuth.signedIn, page]);
+    if (!authChecked) return;
+    const PUBLIC_PAGES = ["home","login","about","contact"];
+    if (googleAuth.signedIn) {
+      if (!googleAuth.onboarded && page !== "onboarding") setPage("onboarding");
+      else if (googleAuth.onboarded && page === "login") setPage("dashboard");
+    } else if (!PUBLIC_PAGES.includes(page)) {
+      setPage("login");
+    }
+  },[authChecked, googleAuth.signedIn, googleAuth.onboarded, page]);
 
   useEffect(()=>{
     applyTheme(settings.theme);
@@ -2122,18 +2232,19 @@ function App(){
   const logout = async () => {
     const base = String(settings.api || API.baseUrl || "").trim().replace(/\/+$/, "");
     try{ await fetch(base + "/auth/logout", { method:"POST", credentials:"include" }); }catch(e){ console.warn("Logout request failed:", e); }
-    setGoogleAuth({signedIn:false,email:"",name:"",picture:"",businessConnected:false});
+    setGoogleAuth(EMPTY_AUTH);
     setProfileOpen(false);
     setPage("home");
     setToastMsg("Logged out");
   };
 
   const open = r => { setSel(r.id); setPage("investigation"); };
+  const landingLike = ["home","login","about","contact","onboarding"].includes(page);
   const waiting = reviews.filter(r=>r.status==="pending").length;
   const review = reviews.find(r=>r.id===sel);
 
   const view = {
-    home:<Home go={setPage}/>, login:<GoogleLogin apiBaseUrl={settings.api} go={setPage} signedIn={googleAuth.signedIn} email={googleAuth.email}/>, try:<AgentPlayground go={setPage} apiBaseUrl={settings.api}/>, dashboard:<Dashboard reviews={reviews} open={open} go={setPage} pipelineStats={pipelineStats}/>, reviews:<Reviews reviews={reviews} open={open} pipelineStats={pipelineStats}/>,
+    home:<Home go={setPage}/>, onboarding:<Onboarding apiBaseUrl={settings.api} auth={googleAuth} go={setPage} onSaved={d=>{ setGoogleAuth(mapAuth(d)); setPage("dashboard"); setToastMsg("Profile saved"); }}/>, login:<GoogleLogin apiBaseUrl={settings.api} go={setPage} signedIn={googleAuth.signedIn} email={googleAuth.email}/>, try:<AgentPlayground go={setPage} apiBaseUrl={settings.api}/>, dashboard:<Dashboard reviews={reviews} open={open} go={setPage} pipelineStats={pipelineStats}/>, reviews:<Reviews reviews={reviews} open={open} pipelineStats={pipelineStats}/>,
     investigation:<Investigation review={review} reviews={reviews} setStatus={setStatus} setResponse={setResponse} go={setPage} toast={setToastMsg}/>,
     action:<Action reviews={reviews} open={open} actionPlans={actionPlans} pipelineStats={pipelineStats}/>, approval:<Approval reviews={reviews} setStatus={setStatus} onDelete={deleteRejectedReview} open={open} toast={setToastMsg}/>,
     reports:<Reports reviews={reviews}/>, settings:<Settings settings={settings} setSettings={setSettings} toast={setToastMsg}/>, about:<About go={setPage}/>, contact:<Contact/>,
@@ -2142,17 +2253,18 @@ function App(){
   return <>
     <style>{THEME_CSS}</style>
     <div className="app">
-      <header className={"topbar"+((page==="home"||page==="login"||page==="about"||page==="contact")?" landing-nav":" app-nav")}>
+      <header className={"topbar"+(landingLike?" landing-nav":" app-nav")}>
         <button className="brand" onClick={()=>setPage("home")} aria-label="AegisCare home">
           <Mark/><span>AegisCare</span>{page!=="home" && <span className="brand-ai">AI</span>}
         </button>
-        {(page==="home" || page==="login" || page==="about" || page==="contact") ? <>
+        {landingLike ? <>
           {(page==="home" || page==="about" || page==="contact") && <nav className="marketing-nav" aria-label="Public navigation">
             <button onClick={()=>setPage("about")}>About</button>
             <button onClick={()=>setPage("contact")}>Contact</button>
           </nav>}
           {page==="home" && <button className="nav-get-started" onClick={()=>setPage("login")}>Explore the platform <span>↗</span></button>}
           {(page==="about" || page==="contact") && <button className="nav-get-started" onClick={()=>setPage("home")}>Back to home <span>↗</span></button>}
+          {page==="onboarding" && <button className="nav-get-started" onClick={logout}>Sign out <span>↗</span></button>}
         </> : <>
           <nav className="top-nav" aria-label="Main navigation">
             {NAV.flatMap(([group,items])=>items).filter(([k])=>k!=="home" && k!=="settings").map(([k,l,ic])=>
@@ -2183,7 +2295,11 @@ function App(){
             {profileOpen && googleAuth.signedIn && createPortal(<div ref={menuRef} role="menu" style={{position:"fixed",right:menuPos.right,top:menuPos.top,minWidth:230,background:"var(--surface)",border:"1px solid var(--line)",borderRadius:12,boxShadow:"0 12px 32px rgba(0,0,0,.35)",padding:8,zIndex:100000}}>
               <div style={{padding:"8px 10px 10px",borderBottom:"1px solid var(--line)",marginBottom:6}}>
                 <div style={{fontWeight:600,color:"var(--text)"}}>{googleAuth.name || "Signed in"}</div>
+                {googleAuth.role && <div className="small muted" style={{marginTop:2}}>{ROLE_LABEL[googleAuth.role]}{googleAuth.profile?.org_name ? ` · ${googleAuth.profile.org_name}` : ""}</div>}
               </div>
+              <button role="menuitem" className="nav" onClick={()=>{ setPage("onboarding"); setProfileOpen(false); }} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"9px 10px",background:"transparent",border:0,cursor:"pointer",color:"var(--text)"}}>
+                <Icon n="user"/><span>Edit profile</span>
+              </button>
               <button role="menuitem" className="nav" onClick={()=>{ setPage("settings"); setProfileOpen(false); }} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"9px 10px",background:"transparent",border:0,cursor:"pointer",color:"var(--text)"}}>
                 <Icon n="settings"/><span>Settings</span>
               </button>
@@ -2195,10 +2311,10 @@ function App(){
         </>}
       </header>
       <main className={"main"+(page==="home"?" landing-main":"")}>
-        {apiError && page !== "settings" && page !== "login" && <div className="panel" role="status" style={{marginBottom:16,borderColor:"var(--danger, #bd7777)"}}><b>Backend connection issue</b><p className="small" style={{margin:"6px 0 0"}}>{apiError}. Check Settings → API connection and verify the dashboard, reviews, investigations, and action-plans endpoints.</p><button className="btn" style={{marginTop:10}} onClick={()=>setPage("settings")}>Open API settings</button></div>}
+        {apiError && page !== "settings" && page !== "login" && page !== "onboarding" && <div className="panel" role="status" style={{marginBottom:16,borderColor:"var(--danger, #bd7777)"}}><b>Backend connection issue</b><p className="small" style={{margin:"6px 0 0"}}>{apiError}. Check Settings → API connection and verify the dashboard, reviews, investigations, and action-plans endpoints.</p><button className="btn" style={{marginTop:10}} onClick={()=>setPage("settings")}>Open API settings</button></div>}
         {view}
       </main>
-      {page!=="home" && page!=="login" && page!=="about" && page!=="contact" && <footer className="app-status">
+      {!landingLike && <footer className="app-status">
         <span>{settings.org}</span>
         <span>{loading ? "Connecting to backend…" : apiError ? `Backend issue · ${apiError}` : "Live backend connected"}</span>
         {lastUpdated && <span>Updated {lastUpdated.toLocaleTimeString()}</span>}
