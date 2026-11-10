@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, text
 # Run this script from the project/backend folder containing your .env file.
 load_dotenv()
 
-ROOT_FOLDER = Path(r"C:\Users\Admin\Pictures\Aegiscare")
+ROOT_FOLDER = Path(r"C:\Users\Admin\Pictures\aegiscare")
 DATABASE_URL = (
     os.getenv("DATABASE_URL")
     or os.getenv("DB_URI")
@@ -69,24 +69,28 @@ with engine.begin() as conn:
         USING GIN (to_tsvector('simple', searchable_text));
     """))
 
-# Recursively scans all Excel files under Aegiscare, including RateMD and city folders.
-extensions = {".xlsx", ".xlsm", ".xls"}
-excel_files = sorted(
+# Recursively scans Excel and CSV files under the Desktop Aegiscare folder.
+extensions = {".xlsx", ".xlsm", ".xls", ".csv"}
+data_files = sorted(
     p for p in ROOT_FOLDER.rglob("*")
     if p.is_file() and p.suffix.lower() in extensions and not p.name.startswith("~$")
 )
 print(f"Dataset root: {ROOT_FOLDER}")
-print(f"Excel files found: {len(excel_files)}")
+print(f"Excel/CSV files found: {len(data_files)}")
 print("Target table: public.imported_dataset_rows")
 print("Existing rows will be preserved; duplicates at the same path/sheet/row are skipped.\n")
 
 files_ok = files_failed = rows_inserted = 0
 folder_counts = {}
 
-for file_path in excel_files:
+for file_path in data_files:
     try:
-        read_engine = "xlrd" if file_path.suffix.lower() == ".xls" else "openpyxl"
-        sheets = pd.read_excel(file_path, sheet_name=None, dtype=object, engine=read_engine)
+        if file_path.suffix.lower() == ".csv":
+            # Treat a CSV as a single sheet named CSV.
+            sheets = {"CSV": pd.read_csv(file_path, dtype=object, encoding="utf-8-sig")}
+        else:
+            read_engine = "xlrd" if file_path.suffix.lower() == ".xls" else "openpyxl"
+            sheets = pd.read_excel(file_path, sheet_name=None, dtype=object, engine=read_engine)
         # The immediate parent label will be RateMD for files directly inside RateMD/.
         city_folder = file_path.parent.name if file_path.parent != ROOT_FOLDER else None
         inserted_for_file = 0
@@ -140,7 +144,7 @@ for file_path in excel_files:
         print(f"FAILED: {file_path} -> {exc}")
 
 print("\n========== IMPORT SUMMARY ==========")
-print(f"Excel files found: {len(excel_files)}")
+print(f"Excel/CSV files found: {len(data_files)}")
 print(f"Files processed:   {files_ok}")
 print(f"Files failed:      {files_failed}")
 print(f"New rows inserted: {rows_inserted}")
