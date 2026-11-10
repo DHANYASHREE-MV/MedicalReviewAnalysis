@@ -1,0 +1,13 @@
+
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+pydantic
+python-dotenv
+playwright
+langgraph
+langchain-groq
+langchain-core
+authlib
+itsdangerous

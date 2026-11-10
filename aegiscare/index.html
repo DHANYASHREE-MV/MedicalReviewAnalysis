@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- Light from the first paint: without this the document carries no
+     data-theme until React mounts, so a dark-preference machine paints a
+     dark frame first. -->
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AegisCare</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- One grotesque for the whole interface, plus its mono for code and
+       tags. IBM Plex Sans + Source Serif 4 are document faces; shipping
+       products set their UI in a single neutral grotesque. -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=Outfit:wght@400;600&display=swap"
+    rel="stylesheet" />
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>
