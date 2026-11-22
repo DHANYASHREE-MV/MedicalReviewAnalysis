@@ -34,54 +34,32 @@ function applyTheme(theme) {
 
 const THEME_CSS = `
 :root[data-theme="light"] {
-  --bg: #F7EAE0 !important;
-  --surface: #FFFBF7 !important;
-  --surface-2: #FBE9DC !important;
-  --line: #EBCDB8 !important;
-  --text: #5E3122 !important;
-  --muted: #7d5c4c !important;
-  --brand: #1D4533 !important;
-  --brand-ink: #1D4533 !important;
-  --on-brand: #ffffff !important;
-  --ok: #3f8a5f !important;
-  --warn: #b8801f !important;
-  --crit: #b5483a !important;
-  --accent: var(--brand) !important;
-  --accent-2: var(--brand) !important;
-  --primary: var(--brand) !important;
-  --good: var(--ok) !important;
-  --danger: var(--crit) !important;
-  --pink: var(--brand) !important;
-  --rose: var(--brand) !important;
-  --purple: var(--brand) !important;
-  --violet: var(--brand) !important;
-  --magenta: var(--brand) !important;
-  --plum: var(--brand) !important;
+  --bg: #f6eddf !important;          /* cream #EEDFC7, lightened for the page */
+  --surface: #fffaf2 !important;
+  --surface-2: #eedfc7 !important;   /* cream */
+  --line: #dcc6a3 !important;
+  --text: #3b2410 !important;        /* brown #533416, deepened for reading */
+  --muted: #6e5235 !important;
+  --brand: #ce7f20 !important;       /* amber */
+  --on-brand: #2b1a08 !important;    /* dark text on amber buttons (white fails contrast) */
+  --ok: #607938 !important;          /* olive */
+  --good: #607938 !important;
+  --warn: #a8640f !important;
+  --crit: #b4442e !important;
 }
 :root[data-theme="dark"] {
-  --bg: #1a110d !important;
-  --surface: #241812 !important;
-  --surface-2: #2f2018 !important;
-  --line: #4a3326 !important;
-  --text: #F7EAE0 !important;
-  --muted: #c9b3a3 !important;
-  --brand: #5aa27f !important;
-  --brand-ink: #8fd0ad !important;
-  --on-brand: #10241a !important;
-  --ok: #8ccf9f !important;
-  --warn: #e6b765 !important;
-  --crit: #ee9a86 !important;
-  --accent: var(--brand) !important;
-  --accent-2: var(--brand) !important;
-  --primary: var(--brand) !important;
-  --good: var(--ok) !important;
-  --danger: var(--crit) !important;
-  --pink: var(--brand) !important;
-  --rose: var(--brand) !important;
-  --purple: var(--brand) !important;
-  --violet: var(--brand) !important;
-  --magenta: var(--brand) !important;
-  --plum: var(--brand) !important;
+  --bg: #1d1309 !important;          /* brown #533416, darkened */
+  --surface: #2a1c0e !important;
+  --surface-2: #362412 !important;
+  --line: #533416 !important;        /* brown */
+  --text: #eedfc7 !important;        /* cream */
+  --muted: #c4ad8a !important;
+  --brand: #ce7f20 !important;       /* amber */
+  --on-brand: #2b1a08 !important;
+  --ok: #8fa866 !important;          /* olive, lightened for dark backgrounds */
+  --good: #8fa866 !important;
+  --warn: #e0a43a !important;
+  --crit: #e07b5f !important;
 }
 :root[data-theme="light"] body,
 :root[data-theme="light"] .app { background: var(--bg) !important; color: var(--text) !important; }
@@ -101,55 +79,169 @@ body, .app, .main { color: var(--text) !important; }
 }
 .f::placeholder, input::placeholder, textarea::placeholder { color: var(--muted) !important; }
 .nav, .brand, .grp, .sys, .muted, .small, .phead p, .lead, .d, .n { color: var(--muted) !important; }
-.nav.on { background: color-mix(in srgb, var(--brand) 18%, transparent) !important; color: var(--brand-ink,var(--brand)) !important; }
+.nav.on { background: color-mix(in srgb, var(--brand) 18%, transparent) !important; color: var(--brand) !important; }
 .seg button, .tabs button, .btn { color: var(--text) !important; border-color: var(--line) !important; background: var(--surface) !important; }
-.seg button.on, .tabs button.on, .btn.pri { background: var(--brand) !important; color: var(--on-brand, #fff) !important; border-color: var(--brand) !important; }
+.seg button.on, .tabs button.on, .btn.pri { background: var(--brand) !important; color: var(--on-brand, #2b1a08) !important; border-color: var(--brand) !important; }
 .rowline, th, td { border-color: var(--line) !important; }
-.link { color: var(--brand-ink,var(--brand)) !important; }
+.link { color: var(--brand) !important; }
 .kpi .v, h1, h2, h3, h4, b, strong, .ph2 { color: var(--text) !important; }
-/* ---- header, logo, landing nav: no leftover purple/pink from the base stylesheet ---- */
-.topbar, .topbar.landing-nav, .topbar.app-nav {
-  background: color-mix(in srgb, var(--surface) 94%, transparent) !important;
-  border-color: var(--line) !important; color: var(--text) !important; }
-.brand, .brand span { color: var(--text) !important; }
-.brand-ai, .brand sup { color: var(--brand-ink, var(--brand)) !important; }
-.marketing-nav button, .marketing-nav a { color: var(--muted) !important; }
-.marketing-nav button:hover, .marketing-nav a:hover { color: var(--text) !important; }
-.nav-get-started { background: var(--brand) !important; color: var(--on-brand, #fff) !important; border-color: var(--brand) !important; }
-.count { background: var(--brand) !important; color: var(--on-brand, #fff) !important; }
-.profile-button { background: var(--surface) !important; border-color: var(--line) !important; color: var(--text) !important; }
-/* ---- landing hero (styled in the base stylesheet): follow the theme instead of purple ---- */
-.landing-hero { background:
-    radial-gradient(60% 55% at 12% 8%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 70%),
-    radial-gradient(55% 50% at 92% 92%, color-mix(in srgb, #F9D2BA 16%, transparent), transparent 70%),
-    var(--bg) !important; color: var(--text) !important; }
-/* decorative rings, beam and dots: rotate whatever purple they use to the brand green */
-.landing-hero::before, .landing-hero::after, .hero-orb, .hero-dots,
-.hero-copy::before, .hero-copy::after { filter: hue-rotate(210deg) saturate(.85) !important; }
-.hero-orb { border-color: color-mix(in srgb, var(--brand) 38%, transparent) !important; box-shadow: none !important; }
-.hero-eyebrow { color: var(--brand-ink, var(--brand)) !important; }
-.landing-hero h1 { color: var(--text) !important; }
-.landing-hero h1 span { background: none !important; -webkit-background-clip: border-box !important; background-clip: border-box !important;
-  -webkit-text-fill-color: var(--brand-ink, var(--brand)) !important; color: var(--brand-ink, var(--brand)) !important; }
-.landing-hero p { color: var(--muted) !important; }
-.hero-explore { color: var(--text) !important; border-color: var(--brand) !important; background: transparent !important; }
-.hero-explore:hover { color: var(--brand-ink, var(--brand)) !important; }
-.hero-features div, .hero-features span { color: var(--muted) !important; }
+/* ---- One palette everywhere: header, landing page, footer ----
+   These parts were styled by the external stylesheet (pink hero, navy header),
+   so they are overridden here to use the same tokens as the rest of the app. */
+.topbar, .topbar.app-nav, .topbar.landing-nav {
+  background: color-mix(in srgb, var(--surface) 92%, transparent) !important;
+  border-bottom: 1px solid var(--line) !important;
+  color: var(--text) !important;
+  backdrop-filter: blur(10px);
+}
+.topbar .brand { background: transparent !important; }
+.topbar .brand, .topbar .brand span { color: var(--text) !important; }
+.topbar .brand svg, .topbar .brand-ai { color: var(--brand) !important; }
+.top-nav .nav, .marketing-nav button {
+  color: var(--text) !important; opacity: 1 !important;
+  background: transparent !important; border-color: transparent !important;
+}
+.top-nav .nav:hover, .marketing-nav button:hover { background: color-mix(in srgb, var(--brand) 12%, transparent) !important; }
+.top-nav .nav.on {
+  color: var(--brand) !important; font-weight: 600;
+  background: color-mix(in srgb, var(--brand) 16%, transparent) !important;
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent) !important;
+}
+.top-nav .nav svg { color: inherit !important; }
+.profile-button { background: var(--surface) !important; color: var(--text) !important; border-color: var(--line) !important; }
+.profile-button span { color: var(--text) !important; }
+.nav-get-started, .hero-explore {
+  background: var(--brand) !important; color: var(--on-brand, #2b1a08) !important;
+  border-color: var(--brand) !important; box-shadow: 0 10px 28px color-mix(in srgb, var(--brand) 30%, transparent) !important;
+}
+.nav-get-started span, .hero-explore span { color: inherit !important; }
+.landing-hero {
+  background:
+    radial-gradient(60% 70% at 15% 20%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 70%),
+    radial-gradient(55% 65% at 85% 75%, color-mix(in srgb, #607938 22%, transparent), transparent 70%),
+    var(--bg) !important;
+  color: var(--text) !important;
+}
+.landing-hero h1, .hero-copy h1 { color: var(--text) !important; background: none !important; -webkit-text-fill-color: currentColor !important; }
+.landing-hero h1 span, .hero-copy h1 span { color: var(--brand) !important; -webkit-text-fill-color: currentColor !important; }
+.landing-hero p, .hero-copy p { color: var(--text) !important; opacity: .88; }
+.hero-eyebrow { color: var(--brand) !important; background: color-mix(in srgb, var(--brand) 12%, transparent) !important; border-color: color-mix(in srgb, var(--brand) 35%, transparent) !important; }
+.hero-orb-left { background: radial-gradient(circle, color-mix(in srgb, var(--brand) 45%, transparent), transparent 70%) !important; }
+.hero-orb-right { background: radial-gradient(circle, color-mix(in srgb, #607938 45%, transparent), transparent 70%) !important; }
+.hero-dots { opacity: .25 !important; filter: sepia(1) saturate(2) hue-rotate(-10deg) !important; }
+.hero-features { background: var(--surface) !important; border-color: var(--line) !important; color: var(--text) !important; }
+.hero-features span { color: var(--text) !important; }
+.hero-features .feature-icon { color: var(--brand) !important; }
 .hero-features i { background: var(--line) !important; }
-.feature-icon { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)) !important; color: var(--brand-ink, var(--brand)) !important;
-  background: color-mix(in srgb, var(--brand) 10%, transparent) !important; }
-.brand svg, .brand .mark { color: var(--brand-ink, var(--brand)) !important; }
-::selection { background: color-mix(in srgb, var(--brand) 30%, transparent); }
-a { color: var(--brand-ink, var(--brand)); }
+.landing-main, .app.pfx, .app { background-color: var(--bg) !important; }
+.app-status { background: var(--surface) !important; color: var(--muted) !important; border-color: var(--line) !important; }
+.chip { color: var(--text) !important; border-color: var(--line) !important; }
+.chip.approved { color: var(--ok) !important; }
+.chip.pending { color: var(--warn) !important; }
+.chip.rejected { color: var(--crit) !important; }
+.toast { background: var(--text) !important; color: var(--bg) !important; }
+
+/* ---------- Weekly health perks (palette tones, flip, stagger, shine) ---------- */
+.pk-wrap { overflow: hidden; }
+.pk-head { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; }
+.pk-head-text { flex: 1 1 320px; min-width: 0; }
+.pk-spark { display: inline-flex; color: var(--brand); animation: pkTwinkle 2.8s ease-in-out infinite; vertical-align: -2px; }
+.pk-ring { position: relative; width: 72px; height: 72px; flex: none; }
+.pk-ring span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 18px; color: var(--text); }
+.pk-ring span small { font-size: 11px; color: var(--muted); }
+.pk-ring span { grid-auto-flow: column; align-content: center; justify-content: center; gap: 1px; }
+.pk-ring-bar { transition: stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1); }
+.pk-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(220px,100%),1fr)); gap: 18px; margin-top: 20px; }
+.pk-cell { display: flex; flex-direction: column; gap: 10px; animation: pkRise .55s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i, 0) * 80ms); transition: opacity .35s, transform .35s; }
+.pk-cell.leaving { opacity: 0; transform: translateY(-10px) scale(.92); pointer-events: none; }
+.pk-card { perspective: 1000px; height: 210px; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; color: inherit; font: inherit; border-radius: 20px; }
+.pk-card:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
+.pk-inner { position: relative; display: block; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.2,.8,.2,1); }
+.pk-card:hover .pk-inner { transform: translateY(-4px) rotateX(3deg); }
+.pk-card.flip .pk-inner { transform: rotateY(180deg); }
+.pk-face { position: absolute; inset: 0; box-sizing: border-box; display: flex; flex-direction: column; border-radius: 20px; padding: 18px; overflow: hidden;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  border: 1px solid color-mix(in srgb, var(--tone) 38%, var(--line));
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 30%, transparent) inset, 0 10px 26px -14px color-mix(in srgb, var(--tone) 70%, transparent); }
+.pk-front { background:
+  radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--tone) 30%, transparent), transparent 60%),
+  linear-gradient(160deg, color-mix(in srgb, var(--tone) 16%, var(--surface)), var(--surface)); }
+.pk-back { transform: rotateY(180deg); gap: 8px; justify-content: center;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tone) 88%, #000 0%), color-mix(in srgb, var(--tone) 70%, #2b1a08)); color: #fffaf2; }
+.pk-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.pk-icon { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 16px; font-size: 26px;
+  color: var(--tone); background: color-mix(in srgb, var(--tone) 18%, var(--surface)); border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent);
+  animation: pkFloat 4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * -.6s); }
+.pk-num { font-size: 11px; font-weight: 700; letter-spacing: .14em; color: color-mix(in srgb, var(--tone) 75%, var(--text)); }
+.pk-title { margin-top: auto; font-size: 17px; font-weight: 700; line-height: 1.3; color: var(--text); }
+.pk-hint { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.pk-back .pk-hint { color: color-mix(in srgb, #fffaf2 80%, transparent); margin-top: auto; }
+.pk-back-title { font-weight: 700; font-size: 15.5px; }
+.pk-back-body { font-size: 14px; line-height: 1.55; overflow: auto; }
+.pk-shine { position: absolute; top: 0; left: -60%; width: 45%; height: 100%; transform: skewX(-20deg); pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 35%, transparent), transparent); opacity: 0; }
+.pk-card:hover .pk-shine { animation: pkShine .9s ease; }
+.pk-done-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  color: color-mix(in srgb, var(--tone) 80%, var(--text)); background: color-mix(in srgb, var(--tone) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent); transition: transform .2s, background .2s, color .2s; }
+.pk-done-btn:hover { transform: translateY(-2px); background: var(--tone); color: #fffaf2; }
+.pk-done-btn:focus-visible { outline: 3px solid var(--tone); outline-offset: 2px; }
+.pk-done { position: relative; text-align: center; padding: 30px 16px 10px; }
+.pk-done-icon { display: inline-grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; font-size: 30px; color: #fffaf2; background: var(--ok); animation: pkPop .6s cubic-bezier(.3,1.6,.5,1); }
+.pk-confetti { position: absolute; inset: 0; pointer-events: none; }
+.pk-confetti i { position: absolute; top: 40%; left: 50%; width: 8px; height: 12px; border-radius: 2px; opacity: 0;
+  animation: pkBurst 1.3s cubic-bezier(.2,.8,.2,1) forwards; animation-delay: calc(var(--i) * 30ms);
+  --a: calc(var(--i) * 25.7deg); }
+@keyframes pkRise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes pkFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes pkShine { from { left: -60%; opacity: 1; } to { left: 130%; opacity: 1; } }
+@keyframes pkTwinkle { 0%,100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.18) rotate(12deg); } }
+@keyframes pkPop { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes pkBurst { 0% { opacity: 1; transform: rotate(var(--a)) translateY(0); } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-120px) rotate(200deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .pk-cell, .pk-icon, .pk-spark, .pk-done-icon, .pk-confetti i, .pk-card:hover .pk-shine { animation: none !important; }
+  .pk-inner, .pk-cell, .pk-ring-bar { transition: none !important; }
+  .pk-confetti { display: none; }
+}
+
+
+/* ---------- Small screens: nothing wider than the screen ---------- */
+.main, .page, .panel { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.panel input[type="file"] { max-width: 100%; }
+@media (max-width: 720px) {
+  .rx-row { grid-template-columns: 1fr 1fr !important; }
+  .rx-row > input:first-child { grid-column: 1 / -1; }
+  .grid2 { grid-template-columns: minmax(0, 1fr) !important; }
+}
+/* ---------- Header: logo, menu and profile never overlap; every label stays readable ---------- */
+.topbar { display: flex !important; align-items: center !important; gap: 14px !important; flex-wrap: nowrap; }
+.topbar > .brand { flex: none !important; position: relative !important; white-space: nowrap; margin-right: 6px; }
+/* The small "AI" badge was absolutely positioned outside the logo's width, so the menu slid under it. Keep it inline. */
+.topbar > .brand { display: inline-flex !important; align-items: center !important; gap: 8px !important; width: auto !important; }
+.topbar .brand-ai { position: relative !important; top: -0.75em !important; left: auto !important; right: auto !important; margin-left: -4px !important; font-size: 0.6em !important; line-height: 1 !important; }
+.topbar .top-nav { flex: 1 1 auto !important; min-width: 0 !important; display: flex !important; flex-wrap: nowrap !important; justify-content: center; gap: 2px !important; position: static !important; transform: none !important; left: auto !important; }
+.topbar .top-nav .nav { flex: none !important; white-space: nowrap; padding: 8px 11px !important; font-size: 14.5px !important; display: inline-flex !important; align-items: center; gap: 7px !important; }
+.topbar .top-nav .nav span { display: inline !important; }
+.topbar > div:last-child { flex: none !important; margin-left: auto; }
+.topbar .profile-button { white-space: nowrap; }
+/* Narrower screens: the menu moves to its own full-width row under the logo instead of squeezing. */
+@media (max-width: 1440px) {
+  .topbar.app-nav:has(.top-nav) { flex-wrap: wrap !important; row-gap: 8px !important; }
+  .topbar.app-nav .top-nav { order: 3; flex: 1 1 100% !important; justify-content: flex-start; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+}
+@media (max-width: 640px) {
+  .topbar .top-nav .nav { padding: 8px 9px !important; font-size: 13.5px !important; }
+  .topbar .profile-button span:not([aria-hidden]) { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+}
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --bg: #F7EAE0; --surface: #FFFBF7; --surface-2: #FBE9DC; --line: #EBCDB8; --text: #5E3122; --muted: #7d5c4c; --brand: #1D4533; --brand-ink: #1D4533; --on-brand: #fff;
+    --bg: #f6eddf; --surface: #fffaf2; --surface-2: #eedfc7; --line: #dcc6a3; --text: #3b2410; --muted: #6e5235;
   }
 }
 `;
 
 const CAT = {
-  "Wait Time": "#4a86c5", "Staff Behavior": "#d08a5e", "Doctor Communication": "#2f7a58",
+  "Wait Time": "#4a86c5", "Staff Behavior": "#c4627a", "Doctor Communication": "#8d7bbd",
   "Billing": "#cf8f3a", "Service Quality": "#b0715a", "Cleanliness": "#8c9aa2",
 };
 
@@ -428,7 +520,6 @@ const apiFetch = (url, opts = {}) => fetch(url, { credentials: "include", ...opt
 
 async function fetchJson(url) {
   const res = await fetch(url, {
-    credentials: "include",
     headers: { Accept: "application/json" },
   });
 
@@ -502,6 +593,7 @@ const GL = {
   ribbon: <path d="M12 3c3 0 5 2 5 4.5S14 12 12 14c-2-2-5-4-5-6.5S9 3 12 3zM9 13l-3 8 4-2 2 2M15 13l3 8-4-2-2 2" />,
   syringe: <path d="M18 3l3 3M16 5l3 3M7 14l7-7 3 3-7 7zM5 19l3-3M4 20l1-1" />,
   clipboard: <path d="M9 4h6v3H9zM7 5H5v16h14V5h-2M9 12h6M9 16h4" />,
+  file: <g><path d="M14 3H6.5A1.5 1.5 0 005 4.5v15A1.5 1.5 0 006.5 21h11a1.5 1.5 0 001.5-1.5V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></g>,
   wind: <path d="M3 9h11a3 3 0 10-3-3M3 15h15a3 3 0 11-3 3M3 12h8" />,
   music: <path d="M9 18V6l10-2v12M9 18a3 3 0 11-3-3M19 16a3 3 0 11-3-3" />,
   ban: <g><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></g>,
@@ -690,6 +782,23 @@ function demoAgent3(review, triage, investigation) {
 
 /* Try It page: the only backend call is the existing pipeline endpoint below. */
 const PIPELINE_ENDPOINT = "/hospital/run-pipeline";
+const PIPELINE_JOBS_ENDPOINT = "/hospital/pipeline-jobs";
+const PIPELINE_STAGE_TEXT = {
+  queued: "Starting…",
+  retrieving: "Retrieving reviews from the selected source…",
+  analysing: "Running Agents 1 → 3 on each review…",
+  saving: "Saving results…",
+};
+function pipelineErrorMessage(detail, fallback) {
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    const summary = detail.message || detail.error || "The server returned an error.";
+    const debug = detail.debug ? `\n\nDebug details:\n${JSON.stringify(detail.debug, null, 2)}` : "";
+    const nextStep = detail.next_step ? `\n\nNext step: ${detail.next_step}` : "";
+    return `${summary}${debug}${nextStep}`;
+  }
+  return fallback;
+}
 // Raised from the old 500 cap; the backend now accepts up to 5000 reviews per run.
 const REVIEW_COUNT_MAX = 5000;
 const SOURCE_OPTIONS = {
@@ -731,6 +840,10 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const [reviewCount, setReviewCount] = useState("20");
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(null);
+  // Stops polling a background analysis job after the person leaves this page.
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [decision, setDecision] = useState({});
@@ -753,7 +866,7 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
       return false;
     }
     try {
-      const res = await apiFetch(`${base()}/reviews/${numericId}/decision`, {
+      const res = await fetch(`${base()}/reviews/${numericId}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, response: JSON.stringify({ action_plan: plan }) })
@@ -796,7 +909,7 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
     setEmailBusy(current => ({ ...current, [id]: "generate" }));
     setEmailErrors(current => ({ ...current, [id]: "" }));
     try {
-      const res = await apiFetch(`${base()}/reviews/${numericId}/generate-email`, {
+      const res = await fetch(`${base()}/reviews/${numericId}/generate-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recipient, action_plan: plan })
@@ -815,7 +928,7 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
     setEmailBusy(current => ({ ...current, [id]: "send" }));
     setEmailErrors(current => ({ ...current, [id]: "" }));
     try {
-      const res = await apiFetch(`${base()}/reviews/${numericId}/send-approval-email`, {
+      const res = await fetch(`${base()}/reviews/${numericId}/send-approval-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recipient: draft.recipient, subject: draft.subject, body: draft.body })
@@ -844,13 +957,9 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
     const isUrl = providerType !== "disease" && /^https?:\/\//i.test(value);
     const isDoctor = providerType === "doctor";
     if (role === "patient") recordSearchTopic(queryValue);
+    setProgress({ stage: "queued" });
     try {
-      const res = await apiFetch(`${base()}${PIPELINE_ENDPOINT}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // Existing fields are unchanged; provider_type, doctor_name, location, source and
-        // reviews_time_range are additive.
-        body: JSON.stringify({
+      const requestBody = JSON.stringify({
           hospital_name: isUrl || isDoctor || providerType === "disease" ? "" : value,
           google_maps_url: isUrl ? value : "",
           review_count: requestedCount,
@@ -861,25 +970,43 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
           location: locationInput.trim(),
           source,
           reviews_time_range: timeRange
-        })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = data?.detail;
-        let message = "Could not process this hospital. Check the backend pipeline endpoint.";
-        if (typeof detail === "string") {
-          message = detail;
-        } else if (detail && typeof detail === "object") {
-          const summary = detail.message || detail.error || "The server returned an error.";
-          const debug = detail.debug ? `\n\nDebug details:\n${JSON.stringify(detail.debug, null, 2)}` : "";
-          const nextStep = detail.next_step ? `\n\nNext step: ${detail.next_step}` : "";
-          message = `${summary}${debug}${nextStep}`;
-        }
-        throw new Error(message);
+        });
+      const fallbackMessage = "Could not process this hospital. Check the backend pipeline endpoint.";
+      // Background job: poll for progress and show each review as soon as the agents finish it.
+      const startRes = await fetch(`${base()}${PIPELINE_JOBS_ENDPOINT}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: requestBody });
+      if (startRes.status === 404 || startRes.status === 405) {
+        // Older backend without job support: use the original single request.
+        const res = await fetch(`${base()}${PIPELINE_ENDPOINT}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: requestBody });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(pipelineErrorMessage(data?.detail, fallbackMessage));
+        setResult(data);
+        return;
       }
-      setResult(data);
+      const started = await startRes.json().catch(() => ({}));
+      if (!startRes.ok || !started.job_id) throw new Error(pipelineErrorMessage(started?.detail, fallbackMessage));
+      let misses = 0;
+      for (;;) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (!mountedRef.current) return;
+        let job;
+        try {
+          const pollRes = await fetch(`${base()}${PIPELINE_JOBS_ENDPOINT}/${started.job_id}`);
+          job = await pollRes.json().catch(() => ({}));
+          if (!pollRes.ok) throw new Error(pipelineErrorMessage(job?.detail, "Lost track of the analysis job."));
+          misses = 0;
+        } catch (pollErr) {
+          // Tolerate a few failed polls (e.g. the backend is busy) before giving up.
+          if (++misses >= 5) throw pollErr;
+          continue;
+        }
+        if (job.status === "done") { setResult(job.response); setProgress(null); break; }
+        if (job.status === "error") throw new Error(pipelineErrorMessage(job.error?.detail, fallbackMessage));
+        const partial = job.partial || {};
+        setProgress({ stage: job.stage, processed: partial.processed || 0, total: partial.reviews_found || 0 });
+        if (Array.isArray(partial.results) && partial.results.length) setResult({ ...partial, partial: true });
+      }
     } catch (e) { setError(e.message || "Unable to start the review analysis."); }
-    finally { setRunning(false); }
+    finally { setRunning(false); setProgress(null); }
   };
 
   const cases = Array.isArray(result?.results) ? result.results : Array.isArray(result?.reviews) ? result.reviews : Array.isArray(result?.cases) ? result.cases : [];
@@ -903,7 +1030,7 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
 
       <fieldset style={{ border: 0, padding: 0, margin: "18px 0 0" }} disabled={running}>
         <legend className="fl">What do you want to analyse?</legend>
-        <div role="radiogroup" aria-label="Analysis type" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginTop: 8 }}>
+        <div role="radiogroup" aria-label="Analysis type" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(200px,100%),1fr))", gap: 12, marginTop: 8 }}>
           {[["hospital", "Hospital / Clinic", "hospital"], ["doctor", "Doctor", "user"], ["disease", "Disease / Condition", "activity"]].map(([k, l, ic]) =>
             <button type="button" key={k} role="radio" aria-checked={providerType === k} onClick={() => { setProviderType(k); setFieldErrors({}); }}
               className={"btn" + (providerType === k ? " pri" : "")}
@@ -960,7 +1087,7 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
         <button type="button" className="btn pri" disabled={running} onClick={startHospitalReviewRun} style={{ minHeight: 44, padding: "10px 22px" }}>
           {running ? "Analysing reviews…" : "Retrieve reviews & analyse"}
         </button>
-        {running && <span className="small muted" role="status">Retrieving reviews and running Agents 1 → 3. This can take a few minutes; please keep this page open.</span>}
+        {running && <span className="small muted" role="status" aria-live="polite">{progress && PIPELINE_STAGE_TEXT[progress.stage] ? PIPELINE_STAGE_TEXT[progress.stage] : "Retrieving reviews and running Agents 1 → 3."}{progress?.total ? ` ${progress.processed || 0} of ${progress.total} reviews done.` : ""} This can take a few minutes; results appear below as each review finishes.</span>}
       </div>
       {error && <div className="panel" role="alert" style={{ marginTop: 16, borderColor: "var(--crit)", color: "var(--crit)", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{error}</div>}
     </section>
@@ -970,7 +1097,7 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
     {result && <section className="panel" style={{ marginTop: 20 }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <div><span className="n">FINAL OUTPUT</span><h2 className="ph2" style={{ marginTop: 8 }}>{pick(result, "hospital_name") !== "—" ? pick(result, "hospital_name") : hospitalInput}</h2><p className="small muted">The agents ran in the background. Review the final recommendations below.</p></div>
-        <span className="chip approved">READY FOR REVIEW</span>
+        {result.partial ? <span className="chip pending">IN PROGRESS</span> : <span className="chip approved">READY FOR REVIEW</span>}
       </div>
       <div className="three" style={{ marginBottom: 18 }}>
         <div><span className="n">Reviews found</span><h3>{pick(result, "reviews_found", "total_reviews", "count")}</h3></div>
@@ -1471,7 +1598,7 @@ function Reviews({ reviews, open, pipelineStats }) {
         <td><button className="link" onClick={() => open(r)}>{r.doctor}</button> <span className="small muted">{r.id}</span><div className="clip">{r.text}</div></td>
         <td><CatDot c={r.category} /></td><td><Sev v={r.severity} /></td>
         <td className="muted">{r.source}<div className="small">{r.date}</div></td><td><Status s={r.status} /></td></tr>)}
-        {list.length === 0 && <tr><td colSpan="5" className="muted">No reviews yet. Run your first analysis from Try It and it will show up here (clear filters if you have some).</td></tr>}
+        {list.length === 0 && <tr><td colSpan="5" className="muted">No live reviews match these filters. Clear filters, or check Settings → API connection and confirm GET /api/reviews returns review rows.</td></tr>}
       </tbody></table></div></div>
   </>;
 }
@@ -1985,7 +2112,7 @@ function Settings({ settings, setSettings, toast }) {
 function About({ go }) {
   return <>
     <PageHead title="About AegisCare AI" sub="Turning patient voices into clearer insights and better care." />
-    <section className="panel" style={{ padding: "clamp(24px,4vw,48px)", marginBottom: 18, background: "radial-gradient(circle at 90% 10%, rgba(249,210,186,.45), transparent 34%),var(--surface)" }}>
+    <section className="panel" style={{ padding: "clamp(24px,4vw,48px)", marginBottom: 18, background: "radial-gradient(circle at 90% 10%, rgba(206,127,32,.15), transparent 34%),var(--surface)" }}>
       <span className="hero-eyebrow">OUR PURPOSE</span>
       <h2 style={{ fontSize: "clamp(28px,4vw,44px)", lineHeight: 1.15, maxWidth: 820, margin: "14px 0" }}>Better care begins with listening.</h2>
       <p className="muted" style={{ fontSize: 17, lineHeight: 1.8, maxWidth: 850 }}>AegisCare AI is a patient-experience intelligence platform designed to help healthcare teams make sense of hospital reviews. It organizes patient feedback into clear signals, highlights issues that may need attention, and helps teams plan practical service improvements.</p>
@@ -2050,7 +2177,7 @@ const ROLE_OPTIONS = [
   { key: "organization", title: "Organization", desc: "I represent a hospital, clinic or health group and manage patient feedback." },
 ];
 const ORG_TYPES = ["Hospital", "Clinic", "Hospital group / chain", "Diagnostic centre", "Other"];
-const EMPTY_AUTH = { signedIn: false, email: "", name: "", picture: "", businessConnected: false, onboarded: false, role: "", profile: {}, isAdmin: false };
+const EMPTY_AUTH = { signedIn: false, email: "", name: "", picture: "", businessConnected: false, onboarded: false, role: "", profile: {}, isAdmin: false, hasAbha: false, hasHpr: false };
 
 function mapAuth(data) {
   const user = data?.user || {};
@@ -2064,6 +2191,8 @@ function mapAuth(data) {
     role: data?.role || "",
     profile: data?.profile || {},
     isAdmin: !!data?.is_admin,
+    hasAbha: !!data?.has_abha,
+    hasHpr: !!data?.has_hpr,
   };
 }
 
@@ -2084,10 +2213,20 @@ function Onboarding({ apiBaseUrl = API.baseUrl, auth, go, onSaved }) {
   const [err, setErr] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
+  // ABHA (patients) and HPR ID (doctors) are optional and saved in their own tables after the profile.
+  const [abhaNumber, setAbhaNumber] = useState("");
+  const [abhaAddress, setAbhaAddress] = useState("");
+  const [skipAbha, setSkipAbha] = useState(false);
+  const [hprId, setHprId] = useState("");
+  const askAbha = role === "patient" && !auth?.hasAbha;
+  const askHpr = role === "doctor" && !auth?.hasHpr;
+  const abhaEntered = askAbha && !skipAbha && !!(abhaNumber.trim() || abhaAddress.trim());
 
   const submit = async () => {
     setErr("");
     if (!role) { setErr("Choose who you are to continue."); return; }
+    if (abhaEntered) { const v = abhaInputError(abhaNumber, abhaAddress); if (v) { setErr(v); return; } }
+    if (askHpr && hprId.trim()) { const v = hprInputError(hprId); if (v) { setErr(v); return; } }
     if (role === "doctor" && !form.specialty.trim()) { setErr("Enter your specialty."); return; }
     if (role === "doctor" && !form.org_name.trim()) { setErr("Enter the hospital or clinic you practise at."); return; }
     if (role === "organization" && !form.org_name.trim()) { setErr("Enter your organization's name."); return; }
@@ -2099,6 +2238,15 @@ function Onboarding({ apiBaseUrl = API.baseUrl, auth, go, onSaved }) {
       const res = await apiFetch(`${base}/profile`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Could not save your profile (${res.status}).`);
+      // The profile save is an upsert, so if the ID below fails the person can fix it and press Continue again.
+      if (abhaEntered) {
+        await readJsonOrThrow(await apiFetch(`${base}/patient/abha`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ abha_number: abhaNumber, abha_address: abhaAddress, share_with_doctors: true }) }), "Your profile was saved, but the ABHA could not be saved");
+        data.has_abha = true;
+      }
+      if (askHpr && hprId.trim()) {
+        await readJsonOrThrow(await apiFetch(`${base}/doctor/hpr`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hpr_id: hprId }) }), "Your profile was saved, but the HPR ID could not be saved");
+        data.has_hpr = true;
+      }
       onSaved(data);
     } catch (e) { setErr(e.message || "Could not save your profile."); }
     finally { setBusy(false); }
@@ -2129,7 +2277,25 @@ function Onboarding({ apiBaseUrl = API.baseUrl, auth, go, onSaved }) {
       {role === "doctor" && <>
         {field("ob-specialty", "Specialty", "specialty", "e.g. Cardiology")}
         {field("ob-clinic", "Hospital / clinic you practise at", "org_name", "e.g. Apollo Clinic")}
+        {askHpr ? <div className="field" style={{ textAlign: "left" }}>
+          <label className="fl" htmlFor="ob-hpr">HPR ID (optional)</label>
+          <input id="ob-hpr" className="f" autoComplete="off" value={hprId} onChange={e => setHprId(e.target.value)} placeholder="14 digits or dr.name@hpr" style={{ width: "100%", boxSizing: "border-box" }} />
+          <div className="small muted" style={{ marginTop: 4 }}>Your Healthcare Professionals Registry ID. Self-declared until ABDM verification is added.</div>
+        </div> : <p className="small muted" style={{ margin: 0, textAlign: "left" }}>Your HPR ID is saved. Manage it from My patients.</p>}
       </>}
+      {role === "patient" && (askAbha
+        ? <div style={{ display: "grid", gap: 10, padding: 14, borderRadius: 12, border: "1px solid var(--line)", textAlign: "left" }}>
+          <div><b>ABHA health ID</b> <span className="small muted">(optional)</span>
+            <div className="small muted" style={{ marginTop: 4 }}>Your 14-digit Ayushman Bharat Health Account number. Don't have one? <a href={ABHA_CREATE_URL} target="_blank" rel="noopener noreferrer">Create it free at abha.abdm.gov.in ↗</a></div>
+          </div>
+          {skipAbha
+            ? <div className="small muted">Skipped. You can add it any time from Prep & Perk. <button type="button" className="btn" style={{ marginLeft: 6, padding: "4px 10px" }} onClick={() => setSkipAbha(false)}>Add it now</button></div>
+            : <>
+              <AbhaFields idPrefix="ob-abha" number={abhaNumber} address={abhaAddress} onNumber={setAbhaNumber} onAddress={setAbhaAddress} />
+              <div><button type="button" className="btn" style={{ padding: "4px 10px" }} onClick={() => { setSkipAbha(true); setAbhaNumber(""); setAbhaAddress(""); }}>Skip for now</button></div>
+            </>}
+        </div>
+        : <p className="small muted" style={{ margin: 0, textAlign: "left" }}>Your ABHA is saved. Manage it from Prep & Perk.</p>)}
       {role === "organization" && <>
         {field("ob-org", "Organization name", "org_name", "e.g. City Care Hospitals")}
         <div className="field" style={{ textAlign: "left" }}>
@@ -2152,9 +2318,843 @@ function Onboarding({ apiBaseUrl = API.baseUrl, auth, go, onSaved }) {
   </section>;
 }
 
+/* =====================================================================
+   ABHA (patients) and HPR ID (doctors).
+   Format checks only: IDs are "Self-declared" until ABDM verification
+   is integrated (phase 2). The backend repeats every check.
+   ===================================================================== */
+const ABHA_CREATE_URL = "https://abha.abdm.gov.in/abha/v3/register";
+const ABHA_ADDRESS_PATTERN = /^[a-z0-9][a-z0-9._]{6,16}[a-z0-9]@(abdm|sbx)$/;
+const HPR_ADDRESS_PATTERN = /^[a-z0-9][a-z0-9._]{2,30}[a-z0-9]@hpr$/;
+// Shows typed digits as XX-XXXX-XXXX-XXXX while the person types.
+function formatAbhaDigits(value) {
+  const d = String(value || "").replace(/\D/g, "").slice(0, 14);
+  return [d.slice(0, 2), d.slice(2, 6), d.slice(6, 10), d.slice(10, 14)].filter(Boolean).join("-");
+}
+function abhaInputError(number, address) {
+  const digits = String(number || "").replace(/\D/g, "");
+  const addr = String(address || "").trim().toLowerCase();
+  if (!digits && !addr) return "Enter your 14-digit ABHA number or your ABHA address.";
+  if (digits && digits.length !== 14) return "ABHA number must be 14 digits, e.g. 91-1234-5678-9012.";
+  if (addr && !ABHA_ADDRESS_PATTERN.test(addr)) return "ABHA address must look like yourname@abdm (8-18 letters, numbers, '.' or '_').";
+  return "";
+}
+function hprInputError(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (/^[\d\s-]+$/.test(raw)) return raw.replace(/\D/g, "").length === 14 ? "" : "HPR ID must be 14 digits.";
+  return HPR_ADDRESS_PATTERN.test(raw) ? "" : "HPR ID must be 14 digits or an HPR address like dr.name@hpr.";
+}
+async function readJsonOrThrow(res, fallback) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : `${fallback} (${res.status}).`);
+  return data;
+}
+const IdBadge = ({ verified }) => <span className="chip" title={verified ? "Checked with ABDM" : "Entered by the account holder. Not yet checked with ABDM."}
+  style={{ marginLeft: 8, fontSize: 11 }}>{verified ? "Verified" : "Self-declared"}</span>;
+
+/* Fields shared by Onboarding and the ABHA card. */
+function AbhaFields({ idPrefix, number, address, onNumber, onAddress }) {
+  return <>
+    <div className="field" style={{ textAlign: "left" }}>
+      <label className="fl" htmlFor={idPrefix + "-num"}>ABHA number</label>
+      <input id={idPrefix + "-num"} className="f" inputMode="numeric" autoComplete="off" value={number}
+        onChange={e => onNumber(formatAbhaDigits(e.target.value))} placeholder="XX-XXXX-XXXX-XXXX" style={{ width: "100%", boxSizing: "border-box" }} />
+    </div>
+    <div className="field" style={{ textAlign: "left" }}>
+      <label className="fl" htmlFor={idPrefix + "-addr"}>ABHA address (optional)</label>
+      <input id={idPrefix + "-addr"} className="f" autoComplete="off" autoCapitalize="none" value={address}
+        onChange={e => onAddress(e.target.value.trim().toLowerCase())} placeholder="yourname@abdm" style={{ width: "100%", boxSizing: "border-box" }} />
+    </div>
+  </>;
+}
+
+/* Step 5: ABHA card on the patient dashboard (Prep & Perk, next to the care profile). */
+function AbhaCard({ apiBaseUrl = API.baseUrl, onAbhaChange }) {
+  const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
+  const [abha, setAbha] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [revealed, setRevealed] = useState(null);
+  const [number, setNumber] = useState("");
+  const [address, setAddress] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+
+  const load = async () => {
+    try { const d = await readJsonOrThrow(await apiFetch(`${base}/patient/abha`), "Could not load your ABHA"); setAbha(d.abha); }
+    catch (e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [base]);
+
+  const startEdit = async () => {
+    setErr(""); setNote("");
+    try {
+      const d = await readJsonOrThrow(await apiFetch(`${base}/patient/abha?reveal=true`), "Could not load your ABHA");
+      setNumber(d.abha?.abha_number || ""); setAddress(d.abha?.abha_address || "");
+    } catch (_) { setNumber(""); setAddress(""); }
+    setEditing(true);
+  };
+  const save = async () => {
+    const v = abhaInputError(number, address);
+    if (v) { setErr(v); return; }
+    setErr(""); setBusy(true);
+    try {
+      const d = await readJsonOrThrow(await apiFetch(`${base}/patient/abha`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ abha_number: number, abha_address: address, share_with_doctors: !!abha?.share_with_doctors })
+      }), "Could not save your ABHA");
+      setAbha(d.abha); setEditing(false); setRevealed(null); setNote("ABHA saved.");
+      if (onAbhaChange) onAbhaChange(true);
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!window.confirm("Remove your ABHA from AegisCare? Doctors you shared it with will no longer see it.")) return;
+    setBusy(true); setErr("");
+    try {
+      await readJsonOrThrow(await apiFetch(`${base}/patient/abha`, { method: "DELETE" }), "Could not remove your ABHA");
+      setAbha(null); setRevealed(null); setNote("ABHA removed.");
+      if (onAbhaChange) onAbhaChange(false);
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+  const toggleShare = async (on) => {
+    setErr("");
+    try {
+      const d = await readJsonOrThrow(await apiFetch(`${base}/patient/abha/sharing`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ share_with_doctors: on })
+      }), "Could not update sharing");
+      setAbha(d.abha);
+    } catch (e) { setErr(e.message); }
+  };
+  const toggleReveal = async () => {
+    if (revealed) { setRevealed(null); return; }
+    try { const d = await readJsonOrThrow(await apiFetch(`${base}/patient/abha?reveal=true`), "Could not load your ABHA"); setRevealed(d.abha); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const shown = revealed || abha;
+  return <section className="panel" style={{ marginBottom: 20 }} aria-label="Your ABHA health ID">
+    <p className="n">YOUR HEALTH ID</p>
+    <h2 className="ph2" style={{ margin: "4px 0 6px" }}>ABHA (Ayushman Bharat Health Account){abha && <IdBadge verified={abha.verified} />}</h2>
+    {loading ? <p className="muted small">Loading…</p>
+      : editing || !abha ? <>
+        <p className="muted small" style={{ margin: "0 0 14px" }}>
+          {abha ? "Update your ABHA details." : "Add your ABHA so doctors you choose can find your health records."}{" "}
+          Don't have one? <a href={ABHA_CREATE_URL} target="_blank" rel="noopener noreferrer">Create it free at abha.abdm.gov.in ↗</a>
+        </p>
+        <AbhaFields idPrefix="abha-card" number={number} address={address} onNumber={setNumber} onAddress={setAddress} />
+        <div className="row" style={{ marginTop: 6 }}>
+          <button className="btn pri" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save ABHA"}</button>
+          {editing && <button className="btn" onClick={() => { setEditing(false); setErr(""); }} disabled={busy}>Cancel</button>}
+        </div>
+      </> : <>
+        <div style={{ display: "grid", gap: 6, margin: "8px 0 14px" }}>
+          {abha.has_number && <div><span className="small muted">ABHA number </span><b style={{ fontFamily: "ui-monospace, monospace", letterSpacing: ".04em" }}>{shown.abha_number || abha.abha_number_masked}</b></div>}
+          {abha.has_address && <div><span className="small muted">ABHA address </span><b>{shown.abha_address || abha.abha_address_masked}</b></div>}
+          <p className="small muted" style={{ margin: 0 }}>Self-declared: we have checked the format only. ABDM verification is coming soon.</p>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 14px" }}>
+          <Switch on={!!abha.share_with_doctors} onChange={toggleShare} label="Share my ABHA with my doctors by default" />
+          <span className="small">Share with my doctors by default <span className="muted">(you can still choose per appointment)</span></span>
+        </label>
+        <div className="row">
+          <button className="btn" onClick={toggleReveal}>{revealed ? "Hide" : "Show full ID"}</button>
+          <button className="btn" onClick={startEdit} disabled={busy}>Edit</button>
+          <button className="btn" onClick={remove} disabled={busy} style={{ color: "var(--crit)" }}>Remove</button>
+        </div>
+      </>}
+    {err && <p role="alert" style={{ color: "var(--crit)", marginTop: 10 }}>{err}</p>}
+    {note && !err && <p role="status" style={{ color: "var(--good)", marginTop: 10 }}>{note}</p>}
+  </section>;
+}
+
+/* Step 5: dismissible reminder for patients who have not added an ABHA yet. */
+function AbhaReminder({ auth, go }) {
+  const key = "aegiscare_abha_reminder_dismissed:" + (auth?.email || "guest");
+  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch (_) { return false; } });
+  if (!auth?.signedIn || auth.role !== "patient" || auth.hasAbha || hidden) return null;
+  const dismiss = () => { setHidden(true); try { localStorage.setItem(key, "1"); } catch (_) { } };
+  return <section className="panel" role="note" style={{ marginBottom: 20, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+    <div style={{ flex: "1 1 280px" }}>
+      <p className="n" style={{ margin: 0 }}>ADD YOUR ABHA</p>
+      <p style={{ margin: "6px 0 0" }}>Link your Ayushman Bharat Health Account so doctors you choose can see your health ID.{" "}
+        <a href={ABHA_CREATE_URL} target="_blank" rel="noopener noreferrer" className="small">Don't have one? Create it free ↗</a></p>
+    </div>
+    <div className="row">
+      <button className="btn pri" onClick={() => go("patient-glow")}>Add ABHA</button>
+      <button className="btn" onClick={dismiss} aria-label="Dismiss ABHA reminder">Not now</button>
+    </div>
+  </section>;
+}
+
+/* Step 7: doctor's own HPR ID (shown on the doctor dashboard and My patients page). */
+function DoctorHprCard({ apiBaseUrl = API.baseUrl, onHprChange }) {
+  const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
+  const [hpr, setHpr] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    apiFetch(`${base}/doctor/hpr`).then(r => readJsonOrThrow(r, "Could not load your HPR ID")).then(d => setHpr(d.hpr)).catch(e => setErr(e.message)).finally(() => setLoading(false));
+  }, [base]);
+  const save = async () => {
+    const v = value.trim() ? hprInputError(value) : "Enter your HPR ID.";
+    if (v) { setErr(v); return; }
+    setBusy(true); setErr("");
+    try {
+      const d = await readJsonOrThrow(await apiFetch(`${base}/doctor/hpr`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hpr_id: value }) }), "Could not save your HPR ID");
+      setHpr(d.hpr); setEditing(false); if (onHprChange) onHprChange(true);
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!window.confirm("Remove your HPR ID from AegisCare?")) return;
+    setBusy(true); setErr("");
+    try { await readJsonOrThrow(await apiFetch(`${base}/doctor/hpr`, { method: "DELETE" }), "Could not remove your HPR ID"); setHpr(null); if (onHprChange) onHprChange(false); }
+    catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+  return <section className="panel" style={{ marginBottom: 20 }} aria-label="Your HPR ID">
+    <p className="n">YOUR PROFESSIONAL ID</p>
+    <h2 className="ph2" style={{ margin: "4px 0 6px" }}>HPR ID (Healthcare Professionals Registry){hpr && <IdBadge verified={hpr.verified} />}</h2>
+    {loading ? <p className="muted small">Loading…</p>
+      : hpr && !editing ? <>
+        <p style={{ margin: "8px 0 14px" }}><b style={{ fontFamily: "ui-monospace, monospace", letterSpacing: ".04em" }}>{hpr.hpr_id}</b></p>
+        <div className="row"><button className="btn" onClick={() => { setValue(hpr.hpr_id); setEditing(true); }}>Edit</button><button className="btn" onClick={remove} disabled={busy} style={{ color: "var(--crit)" }}>Remove</button></div>
+      </> : <>
+        <p className="muted small" style={{ margin: "0 0 12px" }}>Optional. Patients see a badge next to your name when they search for you. Format check only for now.</p>
+        <div className="field"><label className="fl" htmlFor="hpr-card">HPR ID</label>
+          <input id="hpr-card" className="f" autoComplete="off" value={value} onChange={e => setValue(e.target.value)} placeholder="14 digits or dr.name@hpr" /></div>
+        <div className="row"><button className="btn pri" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save HPR ID"}</button>{editing && <button className="btn" onClick={() => { setEditing(false); setErr(""); }}>Cancel</button>}</div>
+      </>}
+    {err && <p role="alert" style={{ color: "var(--crit)", marginTop: 10 }}>{err}</p>}
+  </section>;
+}
+
+/* Step 6d: doctor's "My patients" page. ABHA is shown only where that patient consented for that appointment. */
+function DoctorPatients({ apiBaseUrl = API.baseUrl, onHprChange }) {
+  const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [revealed, setRevealed] = useState({});
+  useEffect(() => {
+    apiFetch(`${base}/doctor/patients`).then(r => readJsonOrThrow(r, "Could not load your patients")).then(d => setItems(d.items || [])).catch(e => setErr(e.message)).finally(() => setLoading(false));
+  }, [base]);
+  const reveal = async (id) => {
+    if (revealed[id]) { setRevealed(r => { const n = { ...r }; delete n[id]; return n; }); return; }
+    try {
+      const d = await readJsonOrThrow(await apiFetch(`${base}/doctor/patients/${id}/abha`), "Could not load this ABHA");
+      setRevealed(r => ({ ...r, [id]: d }));
+    } catch (e) { setErr(e.message); }
+  };
+  const dateLabel = (v) => v ? String(v).slice(0, 10) : "—";
+  return <div className="page">
+    <PageHead title="My patients" sub="Appointment requests from patients who chose you on AegisCare. ABHA IDs appear only when the patient has agreed to share them for that visit." />
+    <DoctorHprCard apiBaseUrl={apiBaseUrl} onHprChange={onHprChange} />
+    <section className="panel">
+      <p className="n">APPOINTMENT REQUESTS</p>
+      {loading ? <p className="muted small">Loading…</p>
+        : err ? <p role="alert" style={{ color: "var(--crit)" }}>{err}</p>
+          : !items.length ? <EmptyArt kind="calendar" title="No patients yet" text="When a patient picks you from the AegisCare doctor list while booking, their request shows up here." />
+            : <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+                <thead><tr className="small muted" style={{ textAlign: "left" }}>
+                  <th style={{ padding: "8px 6px" }}>Patient</th><th style={{ padding: "8px 6px" }}>Date</th><th style={{ padding: "8px 6px" }}>Reason</th><th style={{ padding: "8px 6px" }}>Status</th><th style={{ padding: "8px 6px" }}>ABHA</th>
+                </tr></thead>
+                <tbody>{items.map(a => <tr key={a.id} style={{ borderTop: "1px solid var(--line)", verticalAlign: "top" }}>
+                  <td style={{ padding: "10px 6px" }}><b>{a.patient_name || "Patient"}</b>{a.specialty && <div className="small muted">{a.specialty}</div>}</td>
+                  <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>{dateLabel(a.appointment_date)}<div className="small muted">{a.appointment_time}</div></td>
+                  <td style={{ padding: "10px 6px" }} className="small">{a.reason || <span className="muted">—</span>}</td>
+                  <td style={{ padding: "10px 6px" }}><span className="chip">{a.status || "requested"}</span></td>
+                  <td style={{ padding: "10px 6px" }}>
+                    {a.abha_shared ? <>
+                      <div style={{ fontFamily: "ui-monospace, monospace" }}>{revealed[a.id] ? (revealed[a.id].abha_number || revealed[a.id].abha_address) : a.abha_masked}</div>
+                      {revealed[a.id]?.abha_number && revealed[a.id]?.abha_address && <div className="small">{revealed[a.id].abha_address}</div>}
+                      <div className="small muted">{a.abha_status}</div>
+                      <button className="btn" style={{ marginTop: 6, padding: "4px 10px" }} onClick={() => reveal(a.id)}>{revealed[a.id] ? "Hide" : "Reveal"}</button>
+                    </> : <span className="small muted">Not shared</span>}
+                  </td>
+                </tr>)}</tbody>
+              </table>
+              <p className="small muted" style={{ marginTop: 12 }}>Each time you reveal a full ABHA it is recorded for the patient's privacy.</p>
+            </div>}
+    </section>
+  </div>;
+}
+
+/* Step 6a: search doctors registered on AegisCare from the booking form. */
+function DoctorPicker({ base, selected, onSelect }) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [searched, setSearched] = useState(false);
+  useEffect(() => {
+    if (q.trim().length < 2) { setItems([]); setSearched(false); return; }
+    const t = setTimeout(async () => {
+      setBusy(true);
+      try { const d = await readJsonOrThrow(await apiFetch(`${base}/doctors?q=${encodeURIComponent(q.trim())}`), "Doctor search failed"); setItems(d.items || []); }
+      catch (_) { setItems([]); }
+      finally { setBusy(false); setSearched(true); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, base]);
+  if (selected) return <div className="field" style={{ gridColumn: "1/-1" }}>
+    <span className="fl">Doctor on AegisCare</span>
+    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <span className="chip" style={{ color: "var(--good)" }}>✓ Linked: {selected.name}{selected.specialty ? ` · ${selected.specialty}` : ""}</span>
+      <button type="button" className="btn" style={{ padding: "4px 10px" }} onClick={() => onSelect(null)}>Change</button>
+    </div>
+  </div>;
+  return <div className="field" style={{ gridColumn: "1/-1" }}>
+    <label className="fl" htmlFor="ap-docsearch">Find a doctor registered on AegisCare (optional)</label>
+    <input id="ap-docsearch" className="f" value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name, specialty, clinic or city" autoComplete="off" />
+    {busy && <div className="small muted" style={{ marginTop: 4 }}>Searching…</div>}
+    {!busy && items.length > 0 && <div role="listbox" aria-label="Registered doctors" style={{ display: "grid", gap: 6, marginTop: 8 }}>
+      {items.map(d => <button key={d.doctor_sub} type="button" role="option" aria-selected="false" className="btn" style={{ textAlign: "left", justifyContent: "flex-start" }} onClick={() => { onSelect(d); setQ(""); }}>
+        <span><b>{d.name}</b>{d.has_hpr && <span className="small muted"> · HPR on file</span>}<span className="small muted">{[d.specialty, d.org_name, d.city].filter(Boolean).length ? " · " + [d.specialty, d.org_name, d.city].filter(Boolean).join(" · ") : ""}</span></span>
+      </button>)}
+    </div>}
+    {!busy && searched && !items.length && <div className="small muted" style={{ marginTop: 4 }}>No registered doctor matches. You can still type the doctor or clinic name below.</div>}
+  </div>;
+}
+
+/* =====================================================================
+   CARE RECORD (patient health profile, medical reports, appointment
+   workflow, doctor patient profile). Data lives in the backend; a doctor
+   only reaches a patient through an appointment that patient booked.
+   ===================================================================== */
+const REPORT_CATEGORIES = ["Blood Tests", "Scans", "Prescriptions", "Discharge Summaries", "Other Reports"];
+const APPT_STATUSES = ["pending", "confirmed", "completed", "cancelled"];
+const STATUS_LABEL = { pending: "Pending", confirmed: "Confirmed", completed: "Completed", cancelled: "Cancelled", requested: "Pending" };
+const GENDERS = ["Female", "Male", "Non-binary", "Other", "Prefer not to say"];
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const PREP_CHECKLIST = [
+  ["profile", "My health profile below is up to date"],
+  ["meds", "I have listed every medicine I take, with doses"],
+  ["allergies", "I have noted my allergies"],
+  ["reports", "I have uploaded recent reports and scans"],
+  ["symptoms", "I wrote down my symptoms: when they started and what makes them better or worse"],
+  ["questions", "I wrote my top 3 questions for the doctor"],
+  ["id", "I have my ABHA / ID and insurance details ready"],
+  ["companion", "I know how I'm getting there, and who is coming with me if needed"],
+];
+const apiBase = (u) => String(u || API.baseUrl).trim().replace(/\/+$/, "");
+const fmtDate = (v) => { if (!v) return "—"; const d = new Date(String(v).length <= 10 ? v + "T00:00:00" : v); return isNaN(d) ? String(v) : d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }); };
+const fmtSize = (n) => !n ? "" : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+const splitLines = (v) => String(v || "").split(/\n|;/).map(s => s.trim()).filter(Boolean);
+const StatusChip = ({ s }) => { const k = String(s || "pending").toLowerCase(); return <span className={"chip " + (k === "completed" ? "approved" : k === "cancelled" ? "rejected" : "pending")}>{STATUS_LABEL[k] || k}</span>; };
+
+/* View or download a protected file: fetched with the session cookie, then opened from memory. */
+async function openProtectedFile(url, fileName, download) {
+  const res = await apiFetch(url + (download ? (url.includes("?") ? "&" : "?") + "download=true" : ""));
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(typeof d.detail === "string" ? d.detail : `Could not open the file (${res.status}).`); }
+  const blobUrl = URL.createObjectURL(await res.blob());
+  if (download) {
+    const a = document.createElement("a"); a.href = blobUrl; a.download = fileName || "report"; document.body.appendChild(a); a.click(); a.remove();
+  } else {
+    const w = window.open(blobUrl, "_blank", "noopener");
+    if (!w) { const a = document.createElement("a"); a.href = blobUrl; a.target = "_blank"; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
+  }
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+}
+
+function InfoList({ value, empty = "Not provided" }) {
+  const items = splitLines(value);
+  return items.length ? <ul style={{ margin: "4px 0 0", paddingLeft: 18, lineHeight: 1.6 }}>{items.map((x, i) => <li key={i}>{x}</li>)}</ul> : <p className="small muted" style={{ margin: "4px 0 0" }}>{empty}</p>;
+}
+function InfoRow({ label, children }) {
+  return <div style={{ display: "grid", gridTemplateColumns: "minmax(110px, 38%) 1fr", gap: 10, padding: "7px 0", borderTop: "1px solid var(--line)" }}>
+    <span className="small muted">{label}</span><span style={{ overflowWrap: "anywhere" }}>{children ?? <span className="muted">—</span>}</span>
+  </div>;
+}
+function Tabs({ tabs, value, onChange, label }) {
+  return <div className="act-tabs" role="tablist" aria-label={label} style={{ marginBottom: 14 }}>
+    {tabs.map(([k, l, n]) => <button key={k} type="button" role="tab" aria-selected={value === k} className={"act-tab" + (value === k ? " on" : "")} onClick={() => onChange(k)}>
+      {l}{n !== undefined && n !== null && <span className="small muted" style={{ marginLeft: 6 }}>{n}</span>}
+    </button>)}
+  </div>;
+}
+
+/* ---------------- Patient: health profile form ---------------- */
+function useHealthProfile(apiBaseUrl) {
+  const base = apiBase(apiBaseUrl);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    try { setData(await readJsonOrThrow(await apiFetch(`${base}/patient/health`), "Could not load your health profile")); setErr(""); }
+    catch (e) { setErr(e.message); }
+  };
+  useEffect(() => { load(); }, [base]);
+  const save = async (values) => {
+    const d = await readJsonOrThrow(await apiFetch(`${base}/patient/health`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) }), "Could not save your health profile");
+    setData(cur => ({ ...(cur || {}), health: d.health }));
+    return d.health;
+  };
+  return { data, health: data?.health || {}, err, reload: load, save };
+}
+
+const HEALTH_SECTIONS = [
+  ["Personal details", [
+    ["full_name", "Full name", "text", "As on your ID"], ["date_of_birth", "Date of birth", "date"], ["age", "Age (if you prefer not to give a date of birth)", "number"],
+    ["gender", "Gender", "select", GENDERS], ["blood_group", "Blood group", "select", BLOOD_GROUPS],
+    ["height_cm", "Height (cm)", "number"], ["weight_kg", "Weight (kg)", "number"],
+  ]],
+  ["Contact", [
+    ["phone", "Phone", "tel", "+91 98765 43210"], ["contact_email", "Email", "email"], ["address", "Address", "textarea"], ["emergency_contact", "Emergency contact (name & phone)", "text"],
+  ]],
+  ["Medical history", [
+    ["existing_conditions", "Existing conditions", "textarea", "One per line, e.g. Type 2 diabetes (since 2019)"],
+    ["past_history", "Past medical history", "textarea", "Hospital stays, major illnesses"],
+    ["surgeries", "Surgeries / procedures", "textarea"], ["previous_diagnoses", "Previous diagnoses", "textarea"],
+    ["family_history", "Family history", "textarea", "e.g. Father: heart disease"],
+  ]],
+  ["Medicines & allergies", [
+    ["medications", "Current medications", "textarea", "Name, dose and how often. One per line"],
+    ["allergies", "Known allergies", "textarea", "Medicines, foods, others. Write 'None known' if none"],
+  ]],
+  ["For this visit", [
+    ["current_symptoms", "Current symptoms", "textarea", "What, since when, how severe"], ["concerns", "Concerns & questions", "textarea"],
+    ["notes_for_doctor", "Important to tell the doctor", "textarea", "Pregnancy, recent travel, anything else"], ["lifestyle", "Lifestyle", "textarea", "Smoking, alcohol, exercise, diet, sleep"],
+  ]],
+];
+
+function HealthProfileForm({ apiBaseUrl, profile, onSaved, onCancel, sections }) {
+  const { health, save } = profile;
+  const [form, setForm] = useState(() => ({ ...health }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => { setForm({ ...health }); }, [health?.updated_at]);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const shown = HEALTH_SECTIONS.filter(([t]) => !sections || sections.includes(t));
+  const submit = async (e) => {
+    e.preventDefault(); setErr(""); setBusy(true);
+    const values = {};
+    shown.forEach(([, fields]) => fields.forEach(([k]) => { values[k] = form[k] ?? ""; }));
+    try { await save(values); onSaved && onSaved(); }
+    catch (ex) { setErr(ex.message); }
+    finally { setBusy(false); }
+  };
+  return <form onSubmit={submit} style={{ display: "grid", gap: 18 }}>
+    {shown.map(([title, fields]) => <fieldset key={title} style={{ border: "1px solid var(--line)", borderRadius: 14, padding: "14px 16px", margin: 0 }}>
+      <legend style={{ padding: "0 6px", fontWeight: 600 }}>{title}</legend>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(220px,100%),1fr))", gap: 12 }}>
+        {fields.map(([k, label, type, extra]) => <div key={k} className="field" style={{ gridColumn: type === "textarea" ? "1/-1" : undefined, margin: 0 }}>
+          <label className="fl" htmlFor={"hp-" + k}>{label}</label>
+          {type === "textarea" ? <textarea id={"hp-" + k} className="f" rows="3" value={form[k] || ""} placeholder={extra || ""} onChange={e => set(k, e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />
+            : type === "select" ? <select id={"hp-" + k} className="f" value={form[k] || ""} onChange={e => set(k, e.target.value)} style={{ width: "100%", boxSizing: "border-box" }}><option value="">Select</option>{extra.map(o => <option key={o} value={o}>{o}</option>)}</select>
+              : <input id={"hp-" + k} className="f" type={type} value={form[k] ?? ""} placeholder={extra || ""} max={type === "date" ? new Date().toISOString().slice(0, 10) : undefined} onChange={e => set(k, e.target.value)} style={{ width: "100%", boxSizing: "border-box" }} />}
+        </div>)}
+      </div>
+    </fieldset>)}
+    {err && <p role="alert" style={{ color: "var(--crit)", margin: 0 }}>{err}</p>}
+    <div className="row"><button className="btn pri" type="submit" disabled={busy}>{busy ? "Saving…" : "Save health information"}</button>{onCancel && <button className="btn" type="button" onClick={onCancel} disabled={busy}>Cancel</button>}</div>
+    <p className="small muted" style={{ margin: 0 }}>Saved to your account. A doctor sees it only when you book an appointment with them.</p>
+  </form>;
+}
+
+/* ---------------- Patient: Prepare for your visit (Activities → Prepare) ---------------- */
+function PrepareForVisit({ apiBaseUrl, go }) {
+  const base = apiBase(apiBaseUrl);
+  const profile = useHealthProfile(apiBaseUrl);
+  const h = profile.health;
+  const [editing, setEditing] = useState(false);
+  const [appts, setAppts] = useState([]);
+  const [reportCount, setReportCount] = useState(0);
+  const [saved, setSaved] = useState("");
+  useEffect(() => {
+    apiFetch(`${base}/appointments`).then(r => r.ok ? r.json() : { items: [] }).then(d => setAppts(d.items || [])).catch(() => { });
+    apiFetch(`${base}/patient/reports`).then(r => r.ok ? r.json() : { items: [] }).then(d => setReportCount((d.items || []).length)).catch(() => { });
+  }, [base]);
+  const today = new Date().toISOString().slice(0, 10);
+  const next = appts.filter(a => ["pending", "confirmed"].includes(a.status) && String(a.appointment_date).slice(0, 10) >= today)
+    .sort((a, b) => String(a.appointment_date).localeCompare(String(b.appointment_date)))[0];
+  const checklist = h.checklist || {};
+  const toggle = async (k) => { try { await profile.save({ checklist: { ...checklist, [k]: !checklist[k] } }); } catch (e) { setSaved(e.message); } };
+  const done = PREP_CHECKLIST.filter(([k]) => checklist[k]).length;
+  const missing = [["full_name", "name"], ["gender", "gender"], ["phone", "phone"], ["medications", "medications"], ["allergies", "allergies"]].filter(([k]) => !h[k]).map(([, l]) => l);
+  if (!(h.age || h.date_of_birth)) missing.splice(1, 0, "age");
+  const chips = (v) => splitLines(v).slice(0, 6).map((x, i) => <span key={i} className="chip" style={{ margin: "0 6px 6px 0" }}>{x}</span>);
+
+  return <section style={{ display: "grid", gap: 16, marginBottom: 20, gridTemplateColumns: "minmax(0,1fr)" }} aria-label="Prepare for your visit">
+    <div className="panel" style={{ margin: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div><p className="n" style={{ margin: 0 }}>HEALTH SUMMARY</p>
+          <h2 className="ph2" style={{ margin: "6px 0 2px" }}>{h.full_name || "Your health at a glance"}</h2>
+          <p className="small muted" style={{ margin: 0 }}>{[h.age != null && `${h.age} yrs`, h.gender, h.blood_group && `Blood group ${h.blood_group}`, h.height_cm && `${h.height_cm} cm`, h.weight_kg && `${h.weight_kg} kg`].filter(Boolean).join(" · ") || "Add your details so your doctor has the full picture."}</p>
+        </div>
+        <div className="row"><button className="btn pri" onClick={() => setEditing(e => !e)}>{editing ? "Close editor" : "Update my information"}</button><button className="btn" onClick={() => go("patient-records")}>Medical reports ({reportCount})</button></div>
+      </div>
+      {profile.err && <p role="alert" style={{ color: "var(--crit)" }}>{profile.err}</p>}
+      {missing.length > 0 && !editing && <p className="small" style={{ margin: "12px 0 0", color: "var(--warn)" }}>Missing before your visit: {missing.join(", ")}.</p>}
+      {next && <p style={{ margin: "12px 0 0" }}>Next appointment: <b>{fmtDate(next.appointment_date)}, {next.appointment_time}</b> with {next.doctor_name || next.provider_name} <StatusChip s={next.status} /></p>}
+    </div>
+
+    {editing ? <div className="panel" style={{ margin: 0 }}><HealthProfileForm apiBaseUrl={apiBaseUrl} profile={profile} onSaved={() => { setEditing(false); setSaved("Saved. Your doctor will see the updated information."); }} onCancel={() => setEditing(false)} /></div>
+      : <div className="grid2" style={{ alignItems: "start", gap: 16 }}>
+        <div className="panel" style={{ margin: 0 }}>
+          <p className="n" style={{ margin: 0 }}>MEDICAL HISTORY</p>
+          <h3 style={{ margin: "10px 0 2px", fontSize: 15 }}>Existing conditions</h3><InfoList value={h.existing_conditions} />
+          <h3 style={{ margin: "12px 0 2px", fontSize: 15 }}>Previous diagnoses</h3><InfoList value={h.previous_diagnoses} />
+          <h3 style={{ margin: "12px 0 2px", fontSize: 15 }}>Past history & surgeries</h3><InfoList value={[h.past_history, h.surgeries].filter(Boolean).join("\n")} />
+        </div>
+        <div className="panel" style={{ margin: 0 }}>
+          <p className="n" style={{ margin: 0 }}>MEDICINES & ALLERGIES</p>
+          <h3 style={{ margin: "10px 0 6px", fontSize: 15 }}>Current medications</h3>{splitLines(h.medications).length ? <div>{chips(h.medications)}</div> : <p className="small muted" style={{ margin: 0 }}>None listed</p>}
+          <h3 style={{ margin: "12px 0 6px", fontSize: 15, color: "var(--crit)" }}>Known allergies</h3>{splitLines(h.allergies).length ? <div>{chips(h.allergies)}</div> : <p className="small muted" style={{ margin: 0 }}>None listed</p>}
+        </div>
+        <div className="panel" style={{ margin: 0 }}>
+          <p className="n" style={{ margin: 0 }}>SYMPTOMS & CONCERNS</p>
+          <h3 style={{ margin: "10px 0 2px", fontSize: 15 }}>Current symptoms</h3><InfoList value={h.current_symptoms} />
+          <h3 style={{ margin: "12px 0 2px", fontSize: 15 }}>Concerns & questions</h3><InfoList value={h.concerns} />
+        </div>
+        <div className="panel" style={{ margin: 0, borderColor: "var(--brand)" }}>
+          <p className="n" style={{ margin: 0 }}>SHARE WITH YOUR DOCTOR</p>
+          <InfoList value={[h.notes_for_doctor, h.lifestyle && `Lifestyle: ${h.lifestyle}`, h.family_history && `Family history: ${h.family_history}`].filter(Boolean).join("\n")} empty="Nothing added yet. Use 'Update my information' to add pregnancy, recent travel, or anything else important." />
+        </div>
+      </div>}
+    {saved && <p role="status" style={{ color: "var(--ok)", margin: 0 }}>{saved}</p>}
+
+    <div className="panel" style={{ margin: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><p className="n" style={{ margin: 0 }}>PRE-APPOINTMENT CHECKLIST</p><span className="small muted">{done} of {PREP_CHECKLIST.length} done</span></div>
+      <div style={{ height: 6, borderRadius: 99, background: "var(--surface-2)", margin: "10px 0 12px", overflow: "hidden" }}><i style={{ display: "block", height: "100%", width: `${done / PREP_CHECKLIST.length * 100}%`, background: "var(--ok)", transition: "width .3s" }} /></div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {PREP_CHECKLIST.map(([k, l]) => <label key={k} style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+          <input type="checkbox" checked={!!checklist[k]} onChange={() => toggle(k)} style={{ marginTop: 3 }} /><span style={{ textDecoration: checklist[k] ? "line-through" : "none", opacity: checklist[k] ? .7 : 1 }}>{l}</span>
+        </label>)}
+      </div>
+    </div>
+  </section>;
+}
+
+/* ---------------- Patient: medical reports ---------------- */
+function MedicalReports({ apiBaseUrl }) {
+  const base = apiBase(apiBaseUrl);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [maxMb, setMaxMb] = useState(10);
+  const [filter, setFilter] = useState("all");
+  const [file, setFile] = useState(null);
+  const [meta, setMeta] = useState({ title: "", category: "Blood Tests", report_date: "", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [edit, setEdit] = useState({});
+  const fileRef = useRef(null);
+  const load = async () => {
+    try { const d = await readJsonOrThrow(await apiFetch(`${base}/patient/reports`), "Could not load your reports"); setItems(d.items || []); setMaxMb(d.max_mb || 10); }
+    catch (e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [base]);
+  const pick = (f) => {
+    setErr(""); setNote("");
+    if (!f) { setFile(null); return; }
+    if (!/\.(pdf|jpe?g|png)$/i.test(f.name) || !/^(application\/pdf|image\/(jpeg|png))$/.test(f.type || "application/pdf")) { setErr("Only PDF, JPG and PNG files can be uploaded."); setFile(null); return; }
+    if (f.size > maxMb * 1024 * 1024) { setErr(`Reports must be ${maxMb} MB or smaller.`); setFile(null); return; }
+    setFile(f); setMeta(m => ({ ...m, title: m.title || f.name.replace(/\.[^.]+$/, "") }));
+  };
+  const upload = async (e) => {
+    e.preventDefault();
+    if (!file) { setErr("Choose a file to upload."); return; }
+    setBusy(true); setErr(""); setNote("");
+    try {
+      const data_base64 = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1] || ""); r.onerror = () => reject(new Error("Could not read the file.")); r.readAsDataURL(file); });
+      await readJsonOrThrow(await apiFetch(`${base}/patient/reports`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...meta, file_name: file.name, data_base64 }) }), "Upload failed");
+      setFile(null); if (fileRef.current) fileRef.current.value = ""; setMeta(m => ({ title: "", category: m.category, report_date: "", notes: "" }));
+      setNote("Report uploaded. It is part of your medical profile and visible to doctors you book with."); await load();
+    } catch (ex) { setErr(ex.message); }
+    finally { setBusy(false); }
+  };
+  const saveEdit = async (id) => {
+    try { await readJsonOrThrow(await apiFetch(`${base}/patient/reports/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit) }), "Could not update the report"); setEditId(null); await load(); }
+    catch (ex) { setErr(ex.message); }
+  };
+  const remove = async (r) => {
+    if (!window.confirm(`Delete "${r.title}"? Doctors will no longer be able to see it.`)) return;
+    try { await readJsonOrThrow(await apiFetch(`${base}/patient/reports/${r.id}`, { method: "DELETE" }), "Could not delete the report"); await load(); }
+    catch (ex) { setErr(ex.message); }
+  };
+  const open = (r, download) => openProtectedFile(`${base}/patient/reports/${r.id}/file`, r.file_name, download).catch(ex => setErr(ex.message));
+  const counts = Object.fromEntries(REPORT_CATEGORIES.map(c => [c, items.filter(r => r.category === c).length]));
+  const shown = filter === "all" ? items : items.filter(r => r.category === filter);
+
+  return <div style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(0,1fr)" }}>
+    <section className="panel" style={{ margin: 0 }}>
+      <p className="n">UPLOAD A REPORT</p><h2 className="ph2" style={{ marginTop: 6 }}>Add a medical report</h2>
+      <form onSubmit={upload} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(200px,100%),1fr))", gap: 12, marginTop: 10 }}>
+        <div className="field" style={{ gridColumn: "1/-1", margin: 0 }}><label className="fl" htmlFor="rp-file">File (PDF, JPG or PNG, up to {maxMb} MB) *</label>
+          <input id="rp-file" ref={fileRef} className="f" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={e => pick(e.target.files?.[0])} /></div>
+        <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="rp-title">Report name</label><input id="rp-title" className="f" value={meta.title} onChange={e => setMeta(m => ({ ...m, title: e.target.value }))} placeholder="e.g. CBC – Nov 2026" /></div>
+        <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="rp-cat">Category *</label><select id="rp-cat" className="f" value={meta.category} onChange={e => setMeta(m => ({ ...m, category: e.target.value }))}>{REPORT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></div>
+        <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="rp-date">Report date</label><input id="rp-date" className="f" type="date" max={new Date().toISOString().slice(0, 10)} value={meta.report_date} onChange={e => setMeta(m => ({ ...m, report_date: e.target.value }))} /></div>
+        <div className="field" style={{ gridColumn: "1/-1", margin: 0 }}><label className="fl" htmlFor="rp-notes">Notes (optional)</label><input id="rp-notes" className="f" value={meta.notes} onChange={e => setMeta(m => ({ ...m, notes: e.target.value }))} placeholder="e.g. Fasting sample, ordered by Dr. Rao" /></div>
+        <div style={{ gridColumn: "1/-1" }}><button className="btn pri" type="submit" disabled={busy || !file}>{busy ? "Uploading…" : "Upload report"}</button></div>
+      </form>
+      {err && <p role="alert" style={{ color: "var(--crit)", marginTop: 10 }}>{err}</p>}
+      {note && <p role="status" style={{ color: "var(--ok)", marginTop: 10 }}>{note}</p>}
+    </section>
+
+    <section className="panel" style={{ margin: 0 }}>
+      <p className="n">YOUR REPORTS</p>
+      <Tabs label="Report categories" value={filter} onChange={setFilter} tabs={[["all", "All", items.length], ...REPORT_CATEGORIES.map(c => [c, c, counts[c]])]} />
+      {loading ? <p className="muted small">Loading…</p> : !shown.length ? <EmptyArt kind="search" title={filter === "all" ? "No reports yet" : `No ${filter.toLowerCase()} yet`} text="Upload blood tests, scans, prescriptions or discharge summaries so your doctor can see them." />
+        : <div style={{ display: "grid", gap: 10 }}>{shown.map(r => <div key={r.id} style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 12, display: "grid", gap: 8 }}>
+          {editId === r.id ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(180px,100%),1fr))", gap: 10 }}>
+            <input className="f" aria-label="Report name" value={edit.title ?? ""} onChange={e => setEdit(x => ({ ...x, title: e.target.value }))} />
+            <select className="f" aria-label="Category" value={edit.category} onChange={e => setEdit(x => ({ ...x, category: e.target.value }))}>{REPORT_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select>
+            <input className="f" type="date" aria-label="Report date" value={edit.report_date || ""} onChange={e => setEdit(x => ({ ...x, report_date: e.target.value }))} />
+            <div className="row"><button className="btn pri" onClick={() => saveEdit(r.id)}>Save</button><button className="btn" onClick={() => setEditId(null)}>Cancel</button></div>
+          </div> : <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ minWidth: 0 }}><b>{r.title}</b> <span className="chip" style={{ marginLeft: 6 }}>{r.category}</span>
+              <div className="small muted">{r.report_date ? `Report date ${fmtDate(r.report_date)}` : `Uploaded ${fmtDate(r.uploaded_at)}`} · {r.file_name} · {fmtSize(r.size_bytes)}</div>
+              {r.notes && <div className="small" style={{ marginTop: 2 }}>{r.notes}</div>}</div>
+            <div className="row"><button className="btn" onClick={() => open(r, false)}>View</button><button className="btn" onClick={() => open(r, true)}>Download</button>
+              <button className="btn" onClick={() => { setEditId(r.id); setEdit({ title: r.title, category: r.category, report_date: r.report_date ? String(r.report_date).slice(0, 10) : "" }); }}>Edit</button>
+              <button className="btn" style={{ color: "var(--crit)" }} onClick={() => remove(r)}>Delete</button></div>
+          </div>}
+        </div>)}</div>}
+    </section>
+  </div>;
+}
+
+/* ---------------- Patient: "My records" page (health profile + reports) ---------------- */
+function PatientRecords({ apiBaseUrl, go }) {
+  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem("aegiscare_records_tab") || "reports"; } catch (_) { return "reports"; } });
+  const profile = useHealthProfile(apiBaseUrl);
+  const [saved, setSaved] = useState("");
+  const change = (t) => { setTab(t); try { sessionStorage.setItem("aegiscare_records_tab", t); } catch (_) { } };
+  return <div className="page">
+    <PageHead title="My records" sub="Your medical reports and health profile. Doctors you book with can see them for your appointment; other patients never can.">
+      <button className="btn" onClick={() => go("patient-activities")}>Prepare for a visit</button>
+    </PageHead>
+    <Tabs label="Records" value={tab} onChange={change} tabs={[["reports", "Medical reports"], ["profile", "Health profile"]]} />
+    {tab === "reports" ? <MedicalReports apiBaseUrl={apiBaseUrl} />
+      : <section className="panel">{profile.err && <p role="alert" style={{ color: "var(--crit)" }}>{profile.err}</p>}
+        {profile.data ? <HealthProfileForm apiBaseUrl={apiBaseUrl} profile={profile} onSaved={() => setSaved("Health information saved.")} /> : <p className="muted small">Loading…</p>}
+        {saved && <p role="status" style={{ color: "var(--ok)" }}>{saved}</p>}</section>}
+  </div>;
+}
+
+/* ---------------- Patient: doctor's update on an appointment ---------------- */
+function DoctorUpdate({ a }) {
+  const rx = Array.isArray(a.prescription) ? a.prescription : [];
+  if (!a.diagnosis && !a.consultation_notes && !rx.length && !a.investigations && !a.follow_up) return null;
+  return <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "var(--surface-2)", display: "grid", gap: 6 }}>
+    <b className="small">From {a.doctor_name || "your doctor"}{a.doctor_updated_at ? ` · ${fmtDate(a.doctor_updated_at)}` : ""}</b>
+    {a.diagnosis && <div><span className="small muted">Diagnosis </span>{a.diagnosis}</div>}
+    {rx.length > 0 && <div><span className="small muted">Prescription</span>
+      <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{rx.map((m, i) => <li key={i}><b>{m.medicine}</b>{[m.dose, m.frequency, m.duration].filter(Boolean).length ? ` · ${[m.dose, m.frequency, m.duration].filter(Boolean).join(" · ")}` : ""}{m.instructions ? <span className="muted"> · {m.instructions}</span> : null}</li>)}</ul></div>}
+    {a.investigations && <div><span className="small muted">Tests advised </span>{a.investigations}</div>}
+    {a.consultation_notes && <div><span className="small muted">Doctor's notes </span><span style={{ whiteSpace: "pre-wrap" }}>{a.consultation_notes}</span></div>}
+    {a.follow_up && <div><span className="small muted">Follow-up </span>{a.follow_up}</div>}
+  </div>;
+}
+
+/* ---------------- Doctor: appointment queue + patient profile ---------------- */
+function DoctorQueueCard({ apiBaseUrl, go }) {
+  const base = apiBase(apiBaseUrl);
+  const [d, setD] = useState(null);
+  useEffect(() => { apiFetch(`${base}/doctor/appointments`).then(r => r.ok ? r.json() : null).then(setD).catch(() => { }); }, [base]);
+  if (!d) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const todays = d.items.filter(i => String(i.appointment_date).slice(0, 10) === today && i.status !== "cancelled").length;
+  return <section className="panel" style={{ marginBottom: 20, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+    <div><p className="n" style={{ margin: 0 }}>APPOINTMENTS</p><h2 className="ph2" style={{ margin: "6px 0 0" }}>{d.counts.pending} pending · {d.counts.confirmed} confirmed · {todays} today</h2>
+      {d.demo_doctor && <p className="small muted" style={{ margin: "4px 0 0" }}>Includes the demo doctor's queue: every patient booking without choosing a doctor arrives here.</p>}</div>
+    <button className="btn pri" onClick={() => go("my-patients")}>Open my patients</button>
+  </section>;
+}
+
+function PrescriptionEditor({ rows, onChange }) {
+  const set = (i, k, v) => onChange(rows.map((r, j) => j === i ? { ...r, [k]: v } : r));
+  return <div style={{ display: "grid", gap: 8 }}>
+    {rows.map((r, i) => <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 2fr auto", gap: 6, alignItems: "center" }} className="rx-row">
+      <input className="f" aria-label={`Medicine ${i + 1}`} placeholder="Medicine & strength" value={r.medicine || ""} onChange={e => set(i, "medicine", e.target.value)} />
+      <input className="f" aria-label="Dose" placeholder="Dose" value={r.dose || ""} onChange={e => set(i, "dose", e.target.value)} />
+      <input className="f" aria-label="Frequency" placeholder="e.g. 1-0-1" value={r.frequency || ""} onChange={e => set(i, "frequency", e.target.value)} />
+      <input className="f" aria-label="Duration" placeholder="e.g. 5 days" value={r.duration || ""} onChange={e => set(i, "duration", e.target.value)} />
+      <input className="f" aria-label="Instructions" placeholder="After food…" value={r.instructions || ""} onChange={e => set(i, "instructions", e.target.value)} />
+      <button type="button" className="btn" aria-label={`Remove medicine ${i + 1}`} onClick={() => onChange(rows.filter((_, j) => j !== i))}>✕</button>
+    </div>)}
+    <div><button type="button" className="btn" onClick={() => onChange([...rows, { medicine: "", dose: "", frequency: "", duration: "", instructions: "" }])}>+ Add medicine</button></div>
+  </div>;
+}
+
+function DoctorPatientProfile({ apiBaseUrl, appointmentId, onBack, onChanged, onOpenAppointment }) {
+  const base = apiBase(apiBaseUrl);
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const [tab, setTab] = useState("consult");
+  const [form, setForm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const load = async () => {
+    try {
+      const data = await readJsonOrThrow(await apiFetch(`${base}/doctor/appointments/${appointmentId}`), "Could not load this patient");
+      setD(data); setErr("");
+      const a = data.appointment;
+      setForm({ status: a.status, diagnosis: a.diagnosis || "", consultation_notes: a.consultation_notes || "", investigations: a.investigations || "", follow_up: a.follow_up || "", prescription: Array.isArray(a.prescription) && a.prescription.length ? a.prescription : [{ medicine: "", dose: "", frequency: "", duration: "", instructions: "" }] });
+    } catch (e) { setErr(e.message); }
+  };
+  useEffect(() => { setD(null); setNote(""); load(); }, [base, appointmentId]);
+  const save = async (extra = {}) => {
+    setBusy(true); setNote(""); setErr("");
+    try {
+      const body = { ...form, ...extra, prescription: (form.prescription || []).filter(r => String(r.medicine || "").trim()) };
+      await readJsonOrThrow(await apiFetch(`${base}/doctor/appointments/${appointmentId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), "Could not save");
+      setNote("Saved. The patient can see the update on their dashboard."); await load(); onChanged && onChanged();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+  if (err && !d) return <section className="panel"><button className="btn" onClick={onBack}>← All appointments</button><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
+  if (!d || !form) return <section className="panel"><p className="muted">Loading patient…</p></section>;
+  const p = d.patient, a = d.appointment, snap = a.patient_snapshot || {};
+  const openReport = (r, download) => openProtectedFile(`${base}/doctor/appointments/${appointmentId}/reports/${r.id}/file`, r.file_name, download).catch(e => setErr(e.message));
+  const reportList = (list, emptyText) => !list.length ? <p className="small muted">{emptyText}</p> : <div style={{ display: "grid", gap: 8 }}>{list.map(r => <div key={r.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center", border: "1px solid var(--line)", borderRadius: 10, padding: 10 }}>
+    <div><b>{r.title}</b> <span className="chip">{r.category}</span><div className="small muted">{r.report_date ? fmtDate(r.report_date) : `Uploaded ${fmtDate(r.uploaded_at)}`} · {fmtSize(r.size_bytes)}{r.notes ? ` · ${r.notes}` : ""}</div></div>
+    <div className="row"><button className="btn" onClick={() => openReport(r, false)}>View</button><button className="btn" onClick={() => openReport(r, true)}>Download</button></div></div>)}</div>;
+  const tabs = [["consult", "Consultation"], ["overview", "Profile"], ["history", "Medical history"], ["reports", "Reports", d.reports.length], ["labs", "Labs & investigations", d.lab_reports.length + d.investigations.length], ["rx", "Prescriptions", d.prescriptions.length], ["appts", "Appointments", d.history.length]];
+
+  return <div style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(0,1fr)" }}>
+    <section className="panel" style={{ margin: 0 }}>
+      <button className="btn" onClick={onBack} style={{ marginBottom: 12 }}>← All appointments</button>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div><p className="n" style={{ margin: 0 }}>PATIENT PROFILE</p><h2 className="ph2" style={{ margin: "6px 0 2px" }}>{p.name}</h2>
+          <p className="small muted" style={{ margin: 0 }}>{[p.age != null && `${p.age} yrs`, p.gender, p.blood_group && `Blood group ${p.blood_group}`].filter(Boolean).join(" · ") || "Age and gender not provided"}</p>
+          <p className="small" style={{ margin: "6px 0 0" }}>ABHA: {p.abha ? <b style={{ fontFamily: "ui-monospace, monospace" }}>{p.abha.abha_number || p.abha.abha_address}</b> : <span className="muted">{p.abha_status}</span>}{p.abha && <IdBadge verified={p.abha.verified} />}</p></div>
+        <div style={{ textAlign: "right" }}><StatusChip s={a.status} /><div className="small" style={{ marginTop: 6 }}><b>{fmtDate(a.appointment_date)}, {a.appointment_time}</b></div>
+          <div className="small muted">{a.reason || "No reason given"}</div></div>
+      </div>
+      {splitLines(p.allergies).length > 0 && <p style={{ margin: "12px 0 0", padding: "8px 12px", borderRadius: 10, border: "1px solid var(--crit)", color: "var(--crit)" }}><b>Allergies:</b> {splitLines(p.allergies).join(", ")}</p>}
+    </section>
+    <Tabs label="Patient sections" value={tab} onChange={setTab} tabs={tabs} />
+
+    {tab === "consult" && <section className="panel" style={{ margin: 0, display: "grid", gap: 14 }}>
+      <div className="grid2" style={{ gap: 14 }}>
+        <div><p className="n" style={{ margin: 0 }}>REASON FOR CONSULTATION</p><p style={{ margin: "6px 0 0" }}>{a.reason || "—"}</p>
+          {(a.symptoms || snap.current_symptoms) && <><p className="n" style={{ margin: "12px 0 0" }}>SYMPTOMS</p><p style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{a.symptoms || snap.current_symptoms}</p></>}</div>
+        <div><p className="n" style={{ margin: 0 }}>AT A GLANCE</p>
+          <InfoRow label="Conditions">{splitLines(p.existing_conditions).join(", ") || null}</InfoRow>
+          <InfoRow label="Medications">{splitLines(p.medications).join(", ") || null}</InfoRow>
+          <InfoRow label="Reports">{d.reports.length ? `${d.reports.length} on file` : "None uploaded"}</InfoRow></div>
+      </div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="dc-status">Appointment status</label>
+        <select id="dc-status" className="f" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} style={{ maxWidth: 260 }}>{APPT_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="dc-dx">Diagnosis</label><input id="dc-dx" className="f" value={form.diagnosis} onChange={e => setForm(f => ({ ...f, diagnosis: e.target.value }))} placeholder="e.g. Tension-type headache" /></div>
+      <div className="field" style={{ margin: 0 }}><span className="fl">Prescription</span><PrescriptionEditor rows={form.prescription} onChange={rx => setForm(f => ({ ...f, prescription: rx }))} /></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="dc-tests">Tests advised</label><input id="dc-tests" className="f" value={form.investigations} onChange={e => setForm(f => ({ ...f, investigations: e.target.value }))} placeholder="e.g. CBC, TSH" /></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="dc-notes">Consultation notes</label><textarea id="dc-notes" className="f" rows="4" value={form.consultation_notes} onChange={e => setForm(f => ({ ...f, consultation_notes: e.target.value }))} placeholder="Findings and advice. The patient can read these notes." /></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="dc-fu">Follow-up</label><input id="dc-fu" className="f" value={form.follow_up} onChange={e => setForm(f => ({ ...f, follow_up: e.target.value }))} placeholder="e.g. Review in 2 weeks with reports" /></div>
+      {err && <p role="alert" style={{ color: "var(--crit)", margin: 0 }}>{err}</p>}
+      {note && <p role="status" style={{ color: "var(--ok)", margin: 0 }}>{note}</p>}
+      <div className="row">
+        <button className="btn pri" onClick={() => save()} disabled={busy}>{busy ? "Saving…" : "Save consultation"}</button>
+        {a.status === "pending" && <button className="btn" onClick={() => save({ status: "confirmed" })} disabled={busy}>Confirm appointment</button>}
+        {a.status !== "completed" && <button className="btn" onClick={() => save({ status: "completed" })} disabled={busy}>Save & mark completed</button>}
+      </div>
+    </section>}
+
+    {tab === "overview" && <section className="panel" style={{ margin: 0 }}><div className="grid2" style={{ gap: 20 }}>
+      <div><p className="n">PERSONAL & DEMOGRAPHIC</p>
+        <InfoRow label="Name">{p.name}</InfoRow><InfoRow label="Date of birth">{p.date_of_birth ? fmtDate(p.date_of_birth) : null}</InfoRow><InfoRow label="Age">{p.age}</InfoRow>
+        <InfoRow label="Gender">{p.gender}</InfoRow><InfoRow label="Blood group">{p.blood_group}</InfoRow>
+        <InfoRow label="Height / weight">{[p.height_cm && `${p.height_cm} cm`, p.weight_kg && `${p.weight_kg} kg`].filter(Boolean).join(" / ") || null}</InfoRow>
+        <InfoRow label="ABHA">{p.abha ? `${p.abha.abha_number || ""}${p.abha.abha_address ? ` ${p.abha.abha_address}` : ""} (${p.abha.status})` : p.abha_status}</InfoRow></div>
+      <div><p className="n">CONTACT</p>
+        <InfoRow label="Phone">{p.phone ? <a href={`tel:${String(p.phone).replace(/[^\d+]/g, "")}`}>{p.phone}</a> : null}</InfoRow>
+        <InfoRow label="Email">{p.contact_email || p.account_email}</InfoRow><InfoRow label="Address">{p.address}</InfoRow><InfoRow label="Emergency contact">{p.emergency_contact}</InfoRow>
+        <InfoRow label="Lifestyle">{p.lifestyle}</InfoRow><InfoRow label="Patient's note">{p.notes_for_doctor}</InfoRow></div>
+    </div></section>}
+
+    {tab === "history" && <section className="panel" style={{ margin: 0 }}><div className="grid2" style={{ gap: 20 }}>
+      <div><p className="n">EXISTING CONDITIONS</p><InfoList value={p.existing_conditions} /><p className="n" style={{ marginTop: 16 }}>PAST MEDICAL HISTORY</p><InfoList value={p.past_history} />
+        <p className="n" style={{ marginTop: 16 }}>SURGERIES / PROCEDURES</p><InfoList value={p.surgeries} /><p className="n" style={{ marginTop: 16 }}>PREVIOUS DIAGNOSES</p><InfoList value={p.previous_diagnoses} /></div>
+      <div><p className="n" style={{ color: "var(--crit)" }}>ALLERGIES</p><InfoList value={p.allergies} empty="None recorded" /><p className="n" style={{ marginTop: 16 }}>CURRENT MEDICATIONS</p><InfoList value={p.medications} />
+        <p className="n" style={{ marginTop: 16 }}>FAMILY HISTORY</p><InfoList value={p.family_history} /><p className="n" style={{ marginTop: 16 }}>CURRENT SYMPTOMS & CONCERNS</p><InfoList value={[p.current_symptoms, p.concerns].filter(Boolean).join("\n")} /></div>
+    </div></section>}
+
+    {tab === "reports" && <section className="panel" style={{ margin: 0 }}><p className="n">UPLOADED MEDICAL REPORTS</p>{reportList(d.reports, "The patient has not uploaded any reports.")}</section>}
+    {tab === "labs" && <section className="panel" style={{ margin: 0 }}><p className="n">LAB RESULTS & SCANS</p>{reportList(d.lab_reports, "No blood tests or scans uploaded.")}
+      <p className="n" style={{ marginTop: 18 }}>TESTS ADVISED AT EARLIER VISITS</p>
+      {d.investigations.length ? <ul style={{ paddingLeft: 18 }}>{d.investigations.map(x => <li key={x.appointment_id}><b>{fmtDate(x.date)}</b>: {x.text}</li>)}</ul> : <p className="small muted">None yet.</p>}</section>}
+    {tab === "rx" && <section className="panel" style={{ margin: 0 }}><p className="n">PREVIOUS PRESCRIPTIONS</p>
+      {d.prescriptions.length ? d.prescriptions.map(x => <div key={x.appointment_id} style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}><b>{fmtDate(x.date)}</b> <span className="small muted">{x.doctor_name}{x.diagnosis ? ` · ${x.diagnosis}` : ""}</span>
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{x.items.map((m, i) => <li key={i}><b>{m.medicine}</b> {[m.dose, m.frequency, m.duration, m.instructions].filter(Boolean).join(" · ")}</li>)}</ul></div>)
+        : <p className="small muted">No prescriptions issued on AegisCare yet.</p>}
+      {splitLines(p.medications).length > 0 && <><p className="n" style={{ marginTop: 16 }}>MEDICINES THE PATIENT REPORTS TAKING</p><InfoList value={p.medications} /></>}</section>}
+    {tab === "appts" && <section className="panel" style={{ margin: 0 }}><p className="n">APPOINTMENT HISTORY</p>
+      {d.history.map(h => <div key={h.id} style={{ borderTop: "1px solid var(--line)", padding: "10px 0", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div><b>{fmtDate(h.appointment_date)}, {h.appointment_time}</b> <StatusChip s={h.status} />{h.id === a.id && <span className="small muted"> · this appointment</span>}
+          <div className="small muted">{h.reason || "—"}{h.diagnosis ? ` · Diagnosis: ${h.diagnosis}` : ""}</div></div>
+        {h.id !== a.id && <button className="btn" onClick={() => onOpenAppointment(h.id)}>Open</button>}</div>)}</section>}
+  </div>;
+}
+
+function DoctorAppointments({ apiBaseUrl, onHprChange }) {
+  const base = apiBase(apiBaseUrl);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [status, setStatus] = useState("all");
+  const [q, setQ] = useState("");
+  const [openId, setOpenId] = useState(null);
+  const load = async () => {
+    try { setData(await readJsonOrThrow(await apiFetch(`${base}/doctor/appointments`), "Could not load appointments")); setErr(""); }
+    catch (e) { setErr(e.message); }
+  };
+  // New bookings appear on their own: refresh every 20 seconds while this page is open.
+  useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, [base]);
+  const items = data?.items || [];
+  const term = q.trim().toLowerCase();
+  const shown = items.filter(i => (status === "all" || i.status === status) && (!term || [i.patient_name, i.reason, i.patient_key].some(v => String(v || "").toLowerCase().includes(term))));
+  const patients = Object.values(items.reduce((m, i) => { (m[i.patient_key] = m[i.patient_key] || { ...i, visits: 0 }).visits++; return m; }, {}));
+
+  if (openId) return <div className="page"><DoctorPatientProfile apiBaseUrl={apiBaseUrl} appointmentId={openId} onBack={() => { setOpenId(null); load(); }} onChanged={load} onOpenAppointment={setOpenId} /></div>;
+  return <div className="page">
+    <PageHead title="My patients" sub="Appointments booked by patients, with their profile, history and reports. You see only patients who booked with you.">
+      <button className="btn" onClick={load}>Refresh</button>
+    </PageHead>
+    <DoctorHprCard apiBaseUrl={apiBaseUrl} onHprChange={onHprChange} />
+    {data?.demo_doctor && <p className="small muted" style={{ margin: "0 0 12px" }}>Demo mode: you are also handling the demo doctor's queue, so appointments booked without choosing a doctor appear here.</p>}
+    <section className="panel">
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+        <Tabs label="Appointment status" value={status} onChange={setStatus} tabs={[["all", "All", items.length], ...APPT_STATUSES.map(s => [s, STATUS_LABEL[s], data?.counts?.[s] ?? 0])]} />
+        <input className="f" type="search" aria-label="Search patients" placeholder="Search patient or reason" value={q} onChange={e => setQ(e.target.value)} style={{ maxWidth: 260 }} />
+      </div>
+      {err && <p role="alert" style={{ color: "var(--crit)" }}>{err}</p>}
+      {!data ? <p className="muted small">Loading…</p> : !shown.length ? <EmptyArt kind="calendar" title={items.length ? "No appointments match" : "No appointments yet"} text="When a patient books an appointment, it appears here automatically." />
+        : <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+          <thead><tr className="small muted" style={{ textAlign: "left" }}>{["Patient", "Date & time", "Reason", "Status", "Records", ""].map(h => <th key={h} style={{ padding: "8px 6px" }}>{h}</th>)}</tr></thead>
+          <tbody>{shown.map(i => <tr key={i.id} style={{ borderTop: "1px solid var(--line)", verticalAlign: "top" }}>
+            <td style={{ padding: "10px 6px" }}><b>{i.patient_name}</b><div className="small muted">{[i.patient_key, i.age != null && `${i.age} yrs`, i.gender].filter(Boolean).join(" · ")}</div>{i.phone && <div className="small">{i.phone}</div>}</td>
+            <td style={{ padding: "10px 6px", whiteSpace: "nowrap" }}>{fmtDate(i.appointment_date)}<div className="small muted">{i.appointment_time}</div></td>
+            <td style={{ padding: "10px 6px" }} className="small">{i.reason || <span className="muted">—</span>}{i.diagnosis && <div className="muted">Dx: {i.diagnosis}</div>}</td>
+            <td style={{ padding: "10px 6px" }}><StatusChip s={i.status} /></td>
+            <td style={{ padding: "10px 6px" }} className="small">{i.report_count} report{i.report_count === 1 ? "" : "s"}<div className="muted">ABHA {i.abha_shared ? "shared" : "not shared"}</div></td>
+            <td style={{ padding: "10px 6px" }}><button className="btn pri" onClick={() => setOpenId(i.id)}>Open</button></td>
+          </tr>)}</tbody></table></div>}
+    </section>
+    {patients.length > 0 && <section className="panel" style={{ marginTop: 20 }}>
+      <p className="n">PATIENTS ({patients.length})</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(220px,100%),1fr))", gap: 10 }}>
+        {patients.map(pt => <button key={pt.patient_key} type="button" className="btn" style={{ textAlign: "left", display: "block", padding: 12 }} onClick={() => setOpenId(pt.id)}>
+          <b>{pt.patient_name}</b><div className="small muted">{[pt.age != null && `${pt.age} yrs`, pt.gender].filter(Boolean).join(" · ") || pt.patient_key} · {pt.visits} appointment{pt.visits === 1 ? "" : "s"}</div>
+        </button>)}
+      </div>
+    </section>}
+  </div>;
+}
+
 
 /* ---- small dependency-free pie chart (SVG) ---- */
-const PIE_COLORS = ["#2f7a58", "#e3a77c", "#7fb2e5", "#e5c07b", "#a6593c", "#8aa88f"];
+const PIE_COLORS = ["#ce7f20", "#8fa866", "#eedfc7", "#a0673a", "#607938", "#e0b36a"];
 function PieChart({ data = [], size = 190, emptyText = "Nothing to show yet" }) {
   const items = data.filter(d => Number(d.value) > 0);
   const total = items.reduce((a, d) => a + Number(d.value), 0);
@@ -2191,9 +3191,17 @@ function PieChart({ data = [], size = 190, emptyText = "Nothing to show yet" }) 
 }
 
 /* ---- separate Appointments page for patients ---- */
-function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefill, prefs, defaultSpecialty }) {
+function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefill, prefs, defaultSpecialty, auth }) {
   const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
-  const blank = { provider_name: "", specialty: "", appointment_date: "", appointment_time: "", reason: "" };
+  const blank = { provider_name: "", specialty: "", appointment_date: "", appointment_time: "", reason: "", symptoms: "", doctor_sub: "", share_abha: false };
+  // Step 6: link to a registered AegisCare doctor + per-appointment ABHA consent.
+  const [linkedDoctor, setLinkedDoctor] = useState(null);
+  const [abhaShareDefault, setAbhaShareDefault] = useState(false);
+  const hasAbha = !!auth?.hasAbha;
+  useEffect(() => {
+    if (!hasAbha) return;
+    apiFetch(`${base}/patient/abha`).then(r => r.ok ? r.json() : null).then(d => { if (d?.abha) setAbhaShareDefault(!!d.abha.share_with_doctors); }).catch(() => { });
+  }, [base, hasAbha]);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(() => ({ ...blank, provider_name: prefill?.provider_name || "", specialty: prefill?.specialty || defaultSpecialty || "", appointment_time: TIME_PREF[prefs?.patientTimePref] || "" }));
@@ -2224,6 +3232,41 @@ function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefi
   const [notice, setNotice] = useState("");
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const dateLabel = (v) => v ? String(v).slice(0, 10) : "—";
+  const pickDoctor = (d) => {
+    setLinkedDoctor(d);
+    if (d) setForm(f => ({ ...f, doctor_sub: d.doctor_sub, provider_name: d.name || f.provider_name, specialty: d.specialty || f.specialty, share_abha: hasAbha && abhaShareDefault }));
+    else setForm(f => ({ ...f, doctor_sub: "", share_abha: false }));
+  };
+  // Demo: the AegisCare demo doctor is preselected, so every booking reaches a doctor dashboard.
+  // A hospital chosen in Find care keeps its name as the place of visit.
+  const [defaultDoctor, setDefaultDoctor] = useState(null);
+  const [healthMissing, setHealthMissing] = useState([]);
+  useEffect(() => {
+    apiFetch(`${base}/doctors/default`).then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      setDefaultDoctor(d);
+      setLinkedDoctor(cur => cur || d);
+      setForm(f => f.doctor_sub ? f : { ...f, doctor_sub: d.doctor_sub, provider_name: f.provider_name || d.name, specialty: f.specialty || d.specialty || "" });
+    }).catch(() => { });
+    apiFetch(`${base}/patient/health`).then(r => r.ok ? r.json() : null).then(d => {
+      const h = d?.health || {};
+      setHealthMissing([["full_name", "name"], ["age", "age"], ["gender", "gender"], ["phone", "phone"], ["allergies", "allergies"], ["medications", "medications"]].filter(([k]) => h[k] === undefined || h[k] === null || h[k] === "").map(([, l]) => l));
+    }).catch(() => { });
+  }, [base]);
+  useEffect(() => { setForm(f => f.doctor_sub ? { ...f, share_abha: hasAbha && abhaShareDefault } : f); }, [hasAbha, abhaShareDefault]);
+  const cancelAppointment = async (a) => {
+    if (!window.confirm("Cancel this appointment?")) return;
+    setError("");
+    try { await readJsonOrThrow(await apiFetch(`${base}/appointments/${a.id}/cancel`, { method: "POST" }), "Could not cancel the appointment"); await load(); }
+    catch (err) { setError(err.message); }
+  };
+  const toggleApptShare = async (a) => {
+    setError("");
+    try {
+      const d = await readJsonOrThrow(await apiFetch(`${base}/appointments/${a.id}/abha-share`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ share: !a.abha_shared }) }), "Could not update ABHA sharing");
+      setAppointments(list => list.map(x => x.id === a.id ? { ...x, abha_shared: d.abha_shared } : x));
+    } catch (err) { setError(err.message); }
+  };
   const load = async () => {
     try {
       const res = await apiFetch(`${base}/appointments`);
@@ -2241,7 +3284,8 @@ function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefi
       const res = await apiFetch(`${base}/appointments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `Could not save appointment request (${res.status}).`);
-      setForm(blank); setShowBooking(false); setNotice("Your appointment request has been saved. Please confirm the slot with the hospital using the options above.");
+      setForm(defaultDoctor ? { ...blank, doctor_sub: defaultDoctor.doctor_sub, provider_name: defaultDoctor.name, specialty: defaultDoctor.specialty || "", share_abha: hasAbha && abhaShareDefault } : blank); setLinkedDoctor(defaultDoctor); setShowBooking(false);
+      setNotice(data?.appointment?.doctor_sub ? "Your appointment has been sent to the doctor. You'll see its status and the doctor's notes here." : "Your appointment request has been saved. Please confirm the slot with the hospital using the options above.");
       await load();
     } catch (err) { setError(err.message || "Could not save appointment request."); }
     finally { setBusy(false); }
@@ -2289,23 +3333,38 @@ function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefi
       <section className="panel"><p className="n">BOOKING REQUEST</p><h2 className="ph2">Request an appointment</h2>
         <p className="small muted">Choose a provider from your care search or enter one manually. This saves a request; it does not confirm a real clinic booking.</p>
         {notice && !showBooking && <p role="status" style={{ color: "var(--good)", marginTop: 12 }}>{notice}</p>}
+        {error && !showBooking && <p role="alert" style={{ color: "var(--crit)", marginTop: 12 }}>{error}</p>}
         {!showBooking && <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
           <button className="btn pri" onClick={() => { setShowBooking(true); setNotice(""); }}>Start appointment request</button>
           <button className="btn" onClick={() => go("patient-dashboard")}>Find a provider first</button>
         </div>}
-        {showBooking && <form onSubmit={book} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14, marginTop: 18 }}>
+        {showBooking && <form onSubmit={book} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(200px,100%),1fr))", gap: 14, marginTop: 18 }}>
+          <DoctorPicker base={base} selected={linkedDoctor} onSelect={pickDoctor} />
           <div className="field"><label className="fl" htmlFor="ap-provider">Doctor / clinic name *</label><input id="ap-provider" className="f" value={form.provider_name} onChange={e => setField("provider_name", e.target.value)} required placeholder="e.g. Dr. Priya Sharma" /></div>
           <div className="field"><label className="fl" htmlFor="ap-spec">Specialty</label><input id="ap-spec" className="f" value={form.specialty} onChange={e => setField("specialty", e.target.value)} placeholder="e.g. ENT" /></div>
           <div className="field"><label className="fl" htmlFor="ap-date">Preferred date *</label><input id="ap-date" className="f" type="date" min={new Date().toISOString().slice(0, 10)} value={form.appointment_date} onChange={e => setField("appointment_date", e.target.value)} required /></div>
           <div className="field"><label className="fl" htmlFor="ap-time">Preferred time *</label><input id="ap-time" className="f" type="time" value={form.appointment_time} onChange={e => setField("appointment_time", e.target.value)} required /></div>
           <div className="field" style={{ gridColumn: "1/-1" }}><label className="fl" htmlFor="ap-reason">Reason for visit (optional)</label><textarea id="ap-reason" className="f" rows="3" value={form.reason} onChange={e => setField("reason", e.target.value)} placeholder="What you're experiencing, for how long, and any questions you want answered" /></div>
+          <div className="field" style={{ gridColumn: "1/-1" }}><label className="fl" htmlFor="ap-symptoms">Current symptoms (optional)</label><textarea id="ap-symptoms" className="f" rows="2" value={form.symptoms || ""} onChange={e => setField("symptoms", e.target.value)} placeholder="e.g. Fever since Monday, worse at night" /></div>
+          {linkedDoctor && <div className="small" style={{ gridColumn: "1/-1", padding: 12, borderRadius: 12, background: "var(--surface-2)" }}>
+            {linkedDoctor.name} will receive this request with your name, age, gender, contact details, medical history, medicines, allergies and uploaded reports{form.share_abha ? ", and your ABHA ID" : ""}.
+            {healthMissing.length > 0 && <div style={{ marginTop: 6, color: "var(--warn)" }}>Your profile is missing: {healthMissing.join(", ")}. <button type="button" className="btn" style={{ padding: "2px 10px" }} onClick={() => go("patient-records")}>Complete it</button></div>}
+          </div>}
+          {linkedDoctor && <div className="field" style={{ gridColumn: "1/-1" }}>
+            {hasAbha
+              ? <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <input type="checkbox" checked={!!form.share_abha} onChange={e => setField("share_abha", e.target.checked)} style={{ marginTop: 3 }} />
+                <span>Share my ABHA with this doctor<div className="small muted">Only {linkedDoctor.name} can see it, only for this appointment. You can stop sharing any time.</div></span>
+              </label>
+              : <span className="small muted">Add your ABHA in Prep & Perk if you'd like to share it with this doctor.</span>}
+          </div>}
           {error && <p role="alert" style={{ color: "var(--crit)", gridColumn: "1/-1" }}>{error}</p>}
           <div style={{ gridColumn: "1/-1", display: "flex", gap: 10 }}><button className="btn pri" type="submit" disabled={busy}>{busy ? "Saving…" : "Save appointment request"}</button><button className="btn" type="button" onClick={() => { setShowBooking(false); setError(""); }} disabled={busy}>Cancel</button></div>
         </form>}
       </section>
       <section className="panel"><p className="n">YOUR APPOINTMENTS</p><h2 className="ph2">Recent requests</h2>
         {loading ? <p className="muted small" style={{ marginTop: 12 }}>Loading…</p>
-          : appointments.length ? <div style={{ display: "grid", gap: 12, marginTop: 12 }}>{appointments.map((a, ai) => <div key={a.id} className="pfx-item" style={{ "--i": ai, borderTop: "1px solid var(--line)", paddingTop: 12 }}><b>{a.provider_name}</b><div className="small muted">{a.specialty || "Doctor / clinic"} · {dateLabel(a.appointment_date)} · {a.appointment_time}</div><span className="chip">{a.status || "requested"}</span><ApptTrack status={a.status} />{a.reason && <p className="small muted">{a.reason}</p>}</div>)}</div>
+          : appointments.length ? <div style={{ display: "grid", gap: 12, marginTop: 12 }}>{appointments.map((a, ai) => <div key={a.id} className="pfx-item" style={{ "--i": ai, borderTop: "1px solid var(--line)", paddingTop: 12 }}><b>{a.provider_name}</b><div className="small muted">{a.specialty || "Doctor / clinic"} · {dateLabel(a.appointment_date)} · {a.appointment_time}</div><StatusChip s={a.status} /><ApptTrack status={a.status} />{a.reason && <p className="small muted">{a.reason}</p>}<DoctorUpdate a={a} />{["pending", "confirmed", "requested"].includes(a.status) && <button type="button" className="btn" style={{ padding: "2px 10px", marginTop: 6 }} onClick={() => cancelAppointment(a)}>Cancel appointment</button>}{a.doctor_sub && <div className="small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}><span className="muted">{a.abha_shared ? "ABHA shared with this doctor" : "ABHA not shared"}</span>{(a.abha_shared || hasAbha) && <button type="button" className="btn" style={{ padding: "2px 10px" }} onClick={() => toggleApptShare(a)}>{a.abha_shared ? "Stop sharing" : "Share ABHA"}</button>}</div>}</div>)}</div>
             : <EmptyArt kind="calendar" title="No appointment requests yet" text="Choose a hospital from Find care to send your first request." />}
       </section>
     </div>
@@ -2412,41 +3471,42 @@ const localDayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSta
 const popularScore = (h) => (Number(h.averageRating) || 0) * Math.log(2 + (Number(h.ratingCount) || 0));
 
 const SPEC_ICON = { "Dentist": "tooth", "General Physician": "steth", "ENT": "ear", "Ophthalmology": "eye", "Dermatology": "drop", "Cardiology": "heart", "Gastroenterology": "food", "Orthopedics": "bone", "Neurology": "brain", "Pulmonology": "lung", "Gynecology": "leaf", "Pediatrics": "user", "Urology": "drop", "Endocrinology": "check", "Mental Health": "leaf" };
-// Card/avatar hues stay in a warm coral-amber and teal-green range (warm peach-brown and forest green).
-const HUES = [18, 24, 32, 150, 156, 162];
-const hueOf = (str) => HUES[[...String(str || "")].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7) % HUES.length];
+// Cards tinted with hsl(var(--h) …) use only hues from the brand palette
+// (amber, olive, terracotta, gold, sage) instead of any random hue (which gave purple/pink cards).
+const PALETTE_HUES = [33, 84, 18, 44, 100];
+const hueOf = (str) => PALETTE_HUES[[...String(str || "")].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 9973, 7) % PALETTE_HUES.length];
 const SC_CSS = `
-.sc-hero{position:relative;overflow:hidden;border-radius:22px;padding:30px;border:1px solid var(--line,#EBCDB8);
-  background:radial-gradient(120% 150% at 0% 0%,color-mix(in srgb,var(--brand,#1D4533) 40%,transparent),transparent 60%),
-             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,#7fb2e5 28%,transparent),transparent 60%);
+.sc-hero{position:relative;overflow:hidden;border-radius:22px;padding:30px;border:1px solid var(--line,#533416);
+  background:radial-gradient(120% 150% at 0% 0%,color-mix(in srgb,var(--brand,#ce7f20) 40%,transparent),transparent 60%),
+             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,#8fa866 28%,transparent),transparent 60%);
   display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
 .sc-hero h2{margin:6px 0 8px;font-size:clamp(26px,4vw,40px);line-height:1.1}
 .sc-float{font-size:92px;line-height:1;animation:scFloat 5s ease-in-out infinite;filter:drop-shadow(0 14px 22px rgba(0,0,0,.35))}
 .sc-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.sc-chip{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:color-mix(in srgb,var(--brand,#1D4533) 18%,transparent);border:1px solid color-mix(in srgb,var(--brand,#1D4533) 40%,transparent)}
+.sc-chip{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:color-mix(in srgb,var(--brand,#ce7f20) 18%,transparent);border:1px solid color-mix(in srgb,var(--brand,#ce7f20) 40%,transparent)}
 .sc-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:30px 0 12px;flex-wrap:wrap}
 .sc-title h3{margin:0;font-size:22px}
-.sc-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
+.sc-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:18px}
 .sc-list{display:grid;gap:12px}
-.sc-row{position:relative;display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;padding:14px;border-radius:16px;border:1px solid var(--line,#EBCDB8);
-  background:linear-gradient(145deg,color-mix(in srgb,var(--brand,#1D4533) 10%,transparent),transparent);transition:transform .25s,box-shadow .25s,border-color .25s;animation:scRise .5s both}
-.sc-row:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.28);border-color:color-mix(in srgb,var(--brand,#1D4533) 60%,transparent)}
-.sc-rank{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:700;background:color-mix(in srgb,var(--brand,#1D4533) 20%,transparent)}
+.sc-row{position:relative;display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;padding:14px;border-radius:16px;border:1px solid var(--line,#533416);
+  background:linear-gradient(145deg,color-mix(in srgb,var(--brand,#ce7f20) 10%,transparent),transparent);transition:transform .25s,box-shadow .25s,border-color .25s;animation:scRise .5s both}
+.sc-row:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.28);border-color:color-mix(in srgb,var(--brand,#ce7f20) 60%,transparent)}
+.sc-rank{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:700;background:color-mix(in srgb,var(--brand,#ce7f20) 20%,transparent)}
 .sc-avatar{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;font-size:16px}
 .sc-name{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .sc-stars{position:relative;display:inline-block;letter-spacing:2px;font-size:15px;line-height:1}
 .sc-stars-bg{color:color-mix(in srgb,currentColor 22%,transparent)}
 .sc-stars-fg{position:absolute;left:0;top:0;overflow:hidden;white-space:nowrap;color:#f2c14e}
 .sc-heat{height:5px;border-radius:99px;background:color-mix(in srgb,currentColor 12%,transparent);margin-top:8px;overflow:hidden}
-.sc-heat i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#7fb2e5,var(--brand,#1D4533),#e58f8f);transform-origin:left;animation:scGrow .9s .15s both}
+.sc-heat i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#8fa866,var(--brand,#ce7f20),#e58f8f);transform-origin:left;animation:scGrow .9s .15s both}
 .sc-skel{height:76px;border-radius:16px;background:linear-gradient(100deg,transparent 30%,color-mix(in srgb,currentColor 12%,transparent) 50%,transparent 70%),color-mix(in srgb,currentColor 6%,transparent);background-size:200% 100%;animation:scShimmer 1.3s linear infinite}
-.sc-spot{position:relative;display:flex;gap:22px;align-items:center;padding:24px;border-radius:22px;border:1px solid color-mix(in srgb,var(--brand,#1D4533) 50%,transparent);overflow:hidden;
-  background:linear-gradient(135deg,color-mix(in srgb,var(--brand,#1D4533) 26%,transparent),color-mix(in srgb,#7fb2e5 14%,transparent))}
-.sc-spot::after{content:"";position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,color-mix(in srgb,var(--brand,#1D4533) 30%,transparent),transparent 30%);animation:scSpin 9s linear infinite;pointer-events:none}
+.sc-spot{position:relative;display:flex;gap:22px;align-items:center;padding:24px;border-radius:22px;border:1px solid color-mix(in srgb,var(--brand,#ce7f20) 50%,transparent);overflow:hidden;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--brand,#ce7f20) 26%,transparent),color-mix(in srgb,#8fa866 14%,transparent))}
+.sc-spot::after{content:"";position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,color-mix(in srgb,var(--brand,#ce7f20) 30%,transparent),transparent 30%);animation:scSpin 9s linear infinite;pointer-events:none}
 .sc-spot>*{position:relative;z-index:1}
 .sc-spot-emoji{font-size:64px;line-height:1;animation:scFloat 4s ease-in-out infinite}
 .sc-fade{animation:scFade .5s both}
-.sc-flipgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:16px}
+.sc-flipgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:16px;margin-top:16px}
 .sc-card3d{perspective:900px;height:200px;background:none;border:0;padding:0;cursor:pointer;text-align:left;color:inherit;font:inherit}
 .sc-inner{position:relative;width:100%;height:100%;transition:transform .6s cubic-bezier(.2,.8,.2,1);transform-style:preserve-3d}
 .sc-card3d.flip .sc-inner{transform:rotateY(180deg)}
@@ -2456,23 +3516,23 @@ const SC_CSS = `
 .sc-back{transform:rotateY(180deg);background:linear-gradient(150deg,hsl(var(--h) 70% 55% / .38),hsl(var(--h) 70% 40% / .12));justify-content:center;gap:8px;font-size:14px;line-height:1.55;overflow:auto}
 .sc-emoji{font-size:44px;line-height:1}
 .sc-hint{font-size:12px;opacity:.65}
-.sc-habit{position:relative;overflow:hidden;display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:center;padding:26px;border-radius:22px;border:1px solid var(--line,#EBCDB8);
-  background:linear-gradient(135deg,color-mix(in srgb,#8ccf9f 14%,transparent),color-mix(in srgb,var(--brand,#1D4533) 12%,transparent))}
+.sc-habit{position:relative;overflow:hidden;display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:center;padding:26px;border-radius:22px;border:1px solid var(--line,#533416);
+  background:linear-gradient(135deg,color-mix(in srgb,#8fa866 14%,transparent),color-mix(in srgb,var(--brand,#ce7f20) 12%,transparent))}
 @media(max-width:720px){.sc-habit{grid-template-columns:1fr;justify-items:center;text-align:center}}
 .sc-ring{position:relative;width:132px;height:132px}
 .sc-ring svg{transform:rotate(-90deg)}
 .sc-ring-num{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-weight:800;font-size:30px;line-height:1}
 .sc-ring-num small{display:block;font-size:11px;font-weight:600;opacity:.7;margin-top:2px}
 .sc-orbs{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
-.sc-orb{width:58px;height:70px;border-radius:18px;border:1px solid var(--line,#EBCDB8);background:color-mix(in srgb,currentColor 5%,transparent);color:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;transition:transform .2s,background .3s}
+.sc-orb{width:58px;height:70px;border-radius:18px;border:1px solid var(--line,#533416);background:color-mix(in srgb,currentColor 5%,transparent);color:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;transition:transform .2s,background .3s}
 .sc-orb:hover{transform:translateY(-3px)}
 .sc-orb .dow{font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.5px}
 .sc-orb .num{font-size:18px;font-weight:700}
-.sc-orb.today{outline:2px solid var(--brand,#1D4533);outline-offset:2px;animation:scPulse 2s ease-in-out infinite}
-.sc-orb.on{background:linear-gradient(145deg,#8ccf9f,var(--brand,#1D4533));color:#1a1420;border-color:transparent}
+.sc-orb.today{outline:2px solid var(--brand,#ce7f20);outline-offset:2px;animation:scPulse 2s ease-in-out infinite}
+.sc-orb.on{background:linear-gradient(145deg,#8fa866,var(--brand,#ce7f20));color:#2b1a08;border-color:transparent}
 .sc-orb.on .num{animation:scPop .4s both}
 .sc-badges{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
-.sc-badge{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:14px;font-size:13px;font-weight:600;border:1px dashed var(--line,#EBCDB8);opacity:.45;filter:grayscale(1)}
+.sc-badge{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:14px;font-size:13px;font-weight:600;border:1px dashed var(--line,#533416);opacity:.45;filter:grayscale(1)}
 .sc-badge.on{opacity:1;filter:none;border:1px solid color-mix(in srgb,#f2c14e 70%,transparent);background:color-mix(in srgb,#f2c14e 16%,transparent);animation:scPop .5s both}
 .sc-confetti{position:absolute;left:50%;top:40%;pointer-events:none}
 .sc-confetti i{position:absolute;width:8px;height:13px;border-radius:2px;opacity:0;animation:scConf 1.7s ease-out var(--d) forwards}
@@ -2482,7 +3542,7 @@ const SC_CSS = `
 @keyframes scShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
 @keyframes scSpin{to{transform:rotate(360deg)}}
 @keyframes scFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes scPulse{0%,100%{outline-color:var(--brand,#1D4533)}50%{outline-color:transparent}}
+@keyframes scPulse{0%,100%{outline-color:var(--brand,#ce7f20)}50%{outline-color:transparent}}
 @keyframes scPop{0%{transform:scale(.4)}70%{transform:scale(1.25)}100%{transform:scale(1)}}
 @keyframes scConf{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--x),calc(var(--y) + 280px)) rotate(var(--r))}}
 @media (prefers-reduced-motion:reduce){.sc-float,.sc-spot-emoji,.sc-spot::after,.sc-orb.today,.sc-row,.sc-heat i,.sc-skel,.sc-confetti i{animation:none!important}.sc-inner{transition:none}}
@@ -2665,7 +3725,7 @@ function SpecialtyCare({ spec, city, base, chooseHospital, go }) {
       <div className="sc-habit">
         {burst && <div className="sc-confetti" aria-hidden="true">{confetti.map((p, i) => <i key={i} style={{ "--x": p.x + "px", "--y": p.y + "px", "--r": p.r + "deg", "--d": p.d + "s", background: `hsl(${p.h} 85% 60%)` }} />)}</div>}
         <div className="sc-ring" role="img" aria-label={`${weekCount} of 7 days done this week`}>
-          <svg width="132" height="132" viewBox="0 0 132 132"><circle cx="66" cy="66" r="50" fill="none" stroke="currentColor" strokeOpacity=".12" strokeWidth="12" /><circle cx="66" cy="66" r="50" fill="none" stroke="url(#scg)" strokeWidth="12" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - weekCount / 7)} style={{ transition: "stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)" }} /><defs><linearGradient id="scg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8ccf9f" /><stop offset="100%" stopColor="#1D4533" /></linearGradient></defs></svg>
+          <svg width="132" height="132" viewBox="0 0 132 132"><circle cx="66" cy="66" r="50" fill="none" stroke="currentColor" strokeOpacity=".12" strokeWidth="12" /><circle cx="66" cy="66" r="50" fill="none" stroke="url(#scg)" strokeWidth="12" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - weekCount / 7)} style={{ transition: "stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)" }} /><defs><linearGradient id="scg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8fa866" /><stop offset="100%" stopColor="#ce7f20" /></linearGradient></defs></svg>
           <div className="sc-ring-num"><span>{weekCount}/7<small>this week</small></span></div>
         </div>
         <div>
@@ -2855,6 +3915,8 @@ function PatientDashboard({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider
       <button className="btn" onClick={() => go("onboarding")}>Edit profile</button>
     </PageHead>
 
+    <AbhaReminder auth={auth} go={go} />
+
     <PatientHero name={auth?.name} searchCount={searchCount} appointmentCount={appointmentCount}
       search={{ value: symptom, onChange: setSymptom, busy: careBusy, onSubmit: (e) => { careSearch(e); setActiveTab("find"); setTimeout(() => document.getElementById("care-finder")?.scrollIntoView({ behavior: "smooth", block: "start" }), 250); } }}
       onFind={() => { setActiveTab("find"); window.scrollTo({ top: 0, behavior: "smooth" }); }} onAppointments={() => go("patient-appointments")} onTry={startTryIt} />
@@ -3018,46 +4080,88 @@ function CareProfileCard({ auth, apiBaseUrl = API.baseUrl, go, onProfileSaved })
   </section>;
 }
 
+const PERK_TONES = ["#CE7F20", "#607938", "#A0673A", "#C9A227", "#7E9A55", "#B85C2E"];
 function WeeklyPerks({ auth }) {
   const uid = (auth && (auth.email || auth.id || auth.sub)) || "guest";
   const week = perkWeekKey();
   const [st, setSt] = useLocalState("aegiscare_perks_" + uid, { week: "", seen: [] });
   const [flipped, setFlipped] = useState({});
+  const [leaving, setLeaving] = useState({});
   const seen = st.week === week ? st.seen : [];
 
   // Rotate the starting point every week so each week opens with a different set.
   const weekNumber = Math.floor(new Date(week + "T00:00:00Z").getTime() / 604800000);
   const offset = weekNumber % WEEKLY_PERKS.length;
-  const rotated = [...WEEKLY_PERKS.slice(offset), ...WEEKLY_PERKS.slice(0, offset)].map((p, i) => ({ ...p, id: "p" + ((i + offset) % WEEKLY_PERKS.length) }));
+  const rotated = [...WEEKLY_PERKS.slice(offset), ...WEEKLY_PERKS.slice(0, offset)].map((p, i) => ({ ...p, id: "p" + ((i + offset) % WEEKLY_PERKS.length), n: ((i + offset) % WEEKLY_PERKS.length) + 1 }));
   const unseen = rotated.filter(p => !seen.includes(p.id));
   const visible = unseen.slice(0, 6);
+  const pct = Math.round(seen.length / WEEKLY_PERKS.length * 100);
+  const R = 26, C = 2 * Math.PI * R;
 
-  const markSeen = id => setSt({ week, seen: [...seen, id] });
+  // Let the card animate out before it is removed and the next tip slides in.
+  const markSeen = id => {
+    setLeaving(l => ({ ...l, [id]: true }));
+    setTimeout(() => { setSt({ week, seen: [...seen, id] }); setLeaving(l => { const n = { ...l }; delete n[id]; return n; }); }, 380);
+  };
+  const resetWeek = () => setSt({ week, seen: [] });
 
-  return <section className="panel" style={{ marginBottom: 20 }} aria-label="Weekly health perks">
-    <div className="sc-title" style={{ marginTop: 0 }}>
-      <h3><Gl n="sparkle" /> This week's health perks</h3>
-      <span className="small muted">{seen.length} of {WEEKLY_PERKS.length} seen this week</span>
+  return <section className="panel pk-wrap" style={{ marginBottom: 20 }} aria-label="Weekly health perks">
+    <div className="pk-head">
+      <div className="pk-head-text">
+        <p className="n" style={{ margin: 0 }}>WEEKLY HEALTH PERKS</p>
+        <h2 className="ph2" style={{ margin: "6px 0 4px" }}><span className="pk-spark"><Gl n="sparkle" /></span> This week's health perks</h2>
+        <p className="muted small" style={{ margin: 0 }}>Tap a card to flip it and read the tip. Mark it as done to bring in the next one. A fresh set arrives every Monday.</p>
+      </div>
+      <div className="pk-ring" role="img" aria-label={`${seen.length} of ${WEEKLY_PERKS.length} tips done this week`}>
+        <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
+          <circle cx="36" cy="36" r={R} fill="none" stroke="var(--surface-2)" strokeWidth="7" />
+          <circle cx="36" cy="36" r={R} fill="none" stroke="var(--brand)" strokeWidth="7" strokeLinecap="round"
+            strokeDasharray={C} strokeDashoffset={C * (1 - pct / 100)} transform="rotate(-90 36 36)" className="pk-ring-bar" />
+        </svg>
+        <span><b>{seen.length}</b><small>/{WEEKLY_PERKS.length}</small></span>
+      </div>
     </div>
-    <p className="muted small" style={{ margin: "0 0 4px" }}>Tap a card to read the tip. Mark it as seen to bring in the next one. The full set refreshes every Monday.</p>
 
     {visible.length === 0
-      ? <p style={{ margin: "16px 0 0" }}>You have seen every tip this week. A fresh set starts on Monday.</p>
-      : <div className="sc-flipgrid">
-        {visible.map(t => <div key={t.id} className="wk-cell">
-          <button className={"sc-card3d" + (flipped[t.id] ? " flip" : "")} style={{ "--h": hueOf(t.h) }} aria-pressed={!!flipped[t.id]} aria-label={`${t.h}. Tap to ${flipped[t.id] ? "hide" : "show"} the tip`} onClick={() => setFlipped(f => ({ ...f, [t.id]: !f[t.id] }))}>
-            <span className="sc-inner">
-              <span className="sc-face"><span className="sc-emoji" aria-hidden="true"><Gl n={t.e} /></span><span><b style={{ fontSize: 17 }}>{t.h}</b><br /><span className="sc-hint">Tap to read ↻</span></span></span>
-              <span className="sc-face sc-back"><b>{t.h}</b><span>{t.b}</span></span>
-            </span>
-          </button>
-          <button className="btn" onClick={() => markSeen(t.id)}>Got it</button>
-        </div>)}
+      ? <div className="pk-done" role="status">
+        <div className="pk-confetti" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ "--i": i, background: PERK_TONES[i % PERK_TONES.length] }} />)}</div>
+        <span className="pk-done-icon" aria-hidden="true"><Gl n="check" /></span>
+        <h3 style={{ margin: "8px 0 4px" }}>All {WEEKLY_PERKS.length} tips done this week!</h3>
+        <p className="muted small" style={{ margin: "0 0 12px" }}>A fresh set starts on Monday.</p>
+        <button className="btn" onClick={resetWeek}>Read them again</button>
+      </div>
+      : <div className="pk-grid">
+        {visible.map((t, i) => {
+          const tone = PERK_TONES[(t.n - 1) % PERK_TONES.length];
+          const isFlipped = !!flipped[t.id];
+          return <div key={t.id} className={"pk-cell" + (leaving[t.id] ? " leaving" : "")} style={{ "--tone": tone, "--i": i }}>
+            <button type="button" className={"pk-card" + (isFlipped ? " flip" : "")} aria-pressed={isFlipped}
+              aria-label={`${t.h}. ${isFlipped ? "Showing the tip. Tap to flip back" : "Tap to read the tip"}`}
+              onClick={() => setFlipped(f => ({ ...f, [t.id]: !f[t.id] }))}>
+              <span className="pk-inner">
+                <span className="pk-face pk-front">
+                  <span className="pk-top"><span className="pk-icon" aria-hidden="true"><Gl n={t.e} /></span><span className="pk-num">TIP {String(t.n).padStart(2, "0")}</span></span>
+                  <span className="pk-title">{t.h}</span>
+                  <span className="pk-hint">Tap to read <span aria-hidden="true">↻</span></span>
+                  <span className="pk-shine" aria-hidden="true" />
+                </span>
+                <span className="pk-face pk-back">
+                  <span className="pk-back-title">{t.h}</span>
+                  <span className="pk-back-body">{t.b}</span>
+                  <span className="pk-hint">Tap to flip back <span aria-hidden="true">↺</span></span>
+                </span>
+              </span>
+            </button>
+            <button type="button" className="pk-done-btn" onClick={() => markSeen(t.id)} disabled={!!leaving[t.id]}>
+              <Gl n="check" /> Got it
+            </button>
+          </div>;
+        })}
       </div>}
   </section>;
 }
 
-function PatientGlow({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, onProfileSaved }) {
+function PatientGlow({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, onProfileSaved, onAbhaChange }) {
   const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
   const stored = (() => { try { return JSON.parse(sessionStorage.getItem("aegiscare_care_search") || "null") || {}; } catch (_) { return {}; } })();
   const prepTopic = stored.prepTopic || "";
@@ -3070,6 +4174,7 @@ function PatientGlow({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, onP
   return <div className="page">
     <PageHead title="Prep & Perk" sub="Pick up daily health tips, keep your habit streak going and get ready for your visit." />
     <CareProfileCard auth={auth} apiBaseUrl={apiBaseUrl} go={go} onProfileSaved={onProfileSaved} />
+    <AbhaCard apiBaseUrl={apiBaseUrl} onAbhaChange={onAbhaChange} />
     <WeeklyPerks auth={auth} />
     <SpecialtyCare key={spec + "|" + city} spec={spec} city={city} base={base} chooseHospital={chooseHospital} go={go} />
     {prepTopic
@@ -3155,7 +4260,7 @@ function Plant({ days }) {
       const y = 152 - i * ((h - 18) / Math.max(1, leaves));
       return <ellipse key={i} cx={80 + side * 14} cy={y} rx="13" ry="6" fill="#4caf7a" transform={"rotate(" + side * -28 + " " + (80 + side * 14) + " " + y + ")"} />;
     })}
-    {days >= 15 && <g>{[0, 72, 144, 216, 288].map(a => <circle key={a} cx={80 + 9 * Math.cos(a * Math.PI / 180)} cy={top - 6 + 9 * Math.sin(a * Math.PI / 180)} r="6" fill="#f2b84b" />)}<circle cx="80" cy={top - 6} r="5" fill="#f3c94b" /></g>}
+    {days >= 15 && <g>{[0, 72, 144, 216, 288].map(a => <circle key={a} cx={80 + 9 * Math.cos(a * Math.PI / 180)} cy={top - 6 + 9 * Math.sin(a * Math.PI / 180)} r="6" fill="#e58aa8" />)}<circle cx="80" cy={top - 6} r="5" fill="#f3c94b" /></g>}
   </svg>;
 }
 function MoodCheckin({ uid }) {
@@ -3687,7 +4792,7 @@ function VisitPrep({ uid, initialTopic }) {
   </section>;
 }
 
-function PatientActivities({ auth, go }) {
+function PatientActivities({ auth, go, apiBaseUrl }) {
   const uid = (auth && (auth.email || auth.id || auth.sub)) || "guest";
   const stored = (() => { try { return JSON.parse(sessionStorage.getItem("aegiscare_care_search") || "null") || {}; } catch (_) { return {}; } })();
   const startTopic = stored.prepTopic && PREP_GUIDE[stored.prepTopic] ? stored.prepTopic : "";
@@ -3713,9 +4818,25 @@ function PatientActivities({ auth, go }) {
         <Seg label="Learning" value={learnView} onChange={setLearnView} options={[["quiz", "Knowledge check"], ["myth", "Fact or myth"]]} />
         {learnView === "quiz" ? <DailyQuiz topic={startTopic || "general"} uid={uid} /> : <MythFact />}
       </>}
-      {tab === "prepare" && <VisitPrep uid={uid} initialTopic={startTopic} />}
+      {tab === "prepare" && <>
+        <PrepareForVisit apiBaseUrl={apiBaseUrl} go={go} />
+        <VisitPrep uid={uid} initialTopic={startTopic} />
+      </>}
     </div>
   </div>;
+}
+
+function scopeReviewsToOrg(orgName, reviews) {
+  const name = String(orgName || "").trim().toLowerCase();
+  if (!name) return { scoped: reviews, matched: false };
+  const words = name.split(/\s+/).filter(w => w.length > 2 && !["the", "and", "of", "hospital", "clinic", "hospitals", "clinics", "group", "care", "centre", "center"].includes(w));
+  const matches = reviews.filter(r => {
+    const clinic = String(r.clinic || "").trim().toLowerCase();
+    if (!clinic) return false;
+    if (clinic.includes(name) || name.includes(clinic)) return true;
+    return words.length > 0 && words.some(w => clinic.includes(w));
+  });
+  return matches.length ? { scoped: matches, matched: true } : { scoped: reviews, matched: false };
 }
 
 function OrgDashboard({ auth, reviews, go }) {
@@ -3723,8 +4844,7 @@ function OrgDashboard({ auth, reviews, go }) {
   const orgName = profile.org_name || auth?.name || "Your organization";
   const [tab, setTab] = useState("overview");
 
-  const scoped = reviews;   // already private to this account (server-side)
-  const matched = true;
+  const { scoped, matched } = useMemo(() => scopeReviewsToOrg(profile.org_name, reviews), [profile.org_name, reviews]);
   const neg = scoped.filter(r => r.sentiment === "Negative");
   const pending = scoped.filter(r => r.status === "pending");
   const avgSeverity = neg.length ? (neg.reduce((a, r) => a + r.severity, 0) / neg.length).toFixed(1) : "—";
@@ -3768,7 +4888,7 @@ function OrgDashboard({ auth, reviews, go }) {
     </div>}
 
     <div className="grid3" style={{ marginBottom: 20 }}>
-      <div className="panel"><p className="small muted">Reviews monitored</p><div className="h1">{scoped.length}</div><p className="small muted">{matched ? "Your analysed reviews" : "Across all monitored locations"}</p></div>
+      <div className="panel"><p className="small muted">Reviews monitored</p><div className="h1">{scoped.length}</div><p className="small muted">{matched ? "Matched to your organization" : "Across all monitored locations"}</p></div>
       <div className="panel"><p className="small muted">Awaiting approval</p><div className="h1">{pending.length}</div><p className="small muted">{pending.length ? "Needs a decision" : "Nothing waiting on you"}</p></div>
       <div className="panel"><p className="small muted">Action plans</p><div className="h1">{totalActionPlans}</div><p className="small muted">Avg severity {avgSeverity} / 5</p></div>
     </div>
@@ -3944,8 +5064,8 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .pfx-aurora{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
 .pfx-aurora i{position:absolute;border-radius:50%;filter:blur(120px)}
 .pfx-aurora i:nth-child(1){width:44vmax;height:44vmax;left:-14vmax;top:-16vmax;background:var(--brand);opacity:.12;animation:pfxDrift1 40s ease-in-out infinite alternate}
-.pfx-aurora i:nth-child(2){width:36vmax;height:36vmax;right:-14vmax;top:22vh;background:#6fa8e8;opacity:.07;animation:pfxDrift2 46s ease-in-out infinite alternate}
-.pfx-aurora i:nth-child(3){width:32vmax;height:32vmax;left:26vw;bottom:-22vmax;background:#7fd1a8;opacity:.05;animation:pfxDrift3 44s ease-in-out infinite alternate}
+.pfx-aurora i:nth-child(2){width:36vmax;height:36vmax;right:-14vmax;top:22vh;background:#607938;opacity:.10;animation:pfxDrift2 46s ease-in-out infinite alternate}
+.pfx-aurora i:nth-child(3){width:32vmax;height:32vmax;left:26vw;bottom:-22vmax;background:#eedfc7;opacity:.05;animation:pfxDrift3 44s ease-in-out infinite alternate}
 :root[data-theme="light"] .pfx-aurora i{opacity:.06!important}
 .pfx-scroll{position:fixed;left:0;top:0;height:2px;width:100%;transform-origin:left;transform:scaleX(0);z-index:100001;pointer-events:none;background:var(--brand)}
 
@@ -3998,7 +5118,7 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .pfx .chip.approved{animation:pfxPop .4s both}
 .pfx .f,.pfx select,.pfx textarea,.pfx input{transition:box-shadow .25s,border-color .25s}
 .pfx .f:focus,.pfx select:focus,.pfx textarea:focus,.pfx input:focus{outline:none;border-color:var(--brand) !important;box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 18%,transparent)}
-.pfx .pfx-spark{display:inline-block;color:var(--brand-ink,var(--brand));animation:pfxSpark 6s ease-in-out infinite}
+.pfx .pfx-spark{display:inline-block;color:var(--brand);animation:pfxSpark 6s ease-in-out infinite}
 .pfx .pfx-role{transition:transform .25s,border-color .25s}
 .pfx .pfx-role:hover{transform:translateY(-2px)}
 .pfx .pfx-role[aria-checked="true"]{animation:pfxPop .3s both}
@@ -4011,7 +5131,7 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
   padding:clamp(22px,3.5vw,40px);margin-bottom:22px;border:1px solid var(--line);background:var(--surface)}
 .pfx-hero-copy{position:relative;z-index:1;max-width:620px}
 .pfx-hero h2{font-size:clamp(26px,3.6vw,38px);line-height:1.15;margin:8px 0 10px;letter-spacing:-.01em}
-.pfx-grad-text{color:var(--brand-ink,var(--brand))}
+.pfx-grad-text{color:var(--brand)}
 .pfx-lead{font-size:clamp(15px,1.6vw,17px);line-height:1.65;margin:0;max-width:52ch}
 .pfx-hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
 .pfx-hero-stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
@@ -4029,7 +5149,7 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .art-card.a{left:-3%;top:12%}
 .art-card.b{right:-3%;bottom:10%;animation-delay:-4s}
 .art-card small{display:block;color:var(--muted);font-size:12px}
-.art-card .ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;flex:none;color:var(--brand-ink,var(--brand));background:color-mix(in srgb,var(--brand) 14%,transparent)}
+.art-card .ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;flex:none;color:var(--brand);background:color-mix(in srgb,var(--brand) 14%,transparent)}
 .art-bars{display:grid;gap:4px;width:92px;margin-top:5px}
 .art-bars i{display:block;height:5px;border-radius:3px;background:var(--brand);opacity:.8}
 .art-tile{display:grid;place-items:center;flex:none;border-radius:12px;color:hsl(var(--h) 55% 62%);background:hsl(var(--h) 55% 55% / .15);border:1px solid hsl(var(--h) 55% 55% / .3)}
@@ -4043,23 +5163,23 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .auth-art h2{font-size:clamp(21px,2.4vw,28px);line-height:1.25;margin:0;letter-spacing:-.01em}
 .auth-points{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .auth-points li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--muted);line-height:1.5}
-.auth-points svg{flex:none;color:var(--brand-ink,var(--brand));margin-top:2px}
+.auth-points svg{flex:none;color:var(--brand);margin-top:2px}
 .auth-form{padding:clamp(26px,4vw,46px);display:flex;flex-direction:column;justify-content:center;text-align:center}
 @media (max-width:820px){.auth-shell{grid-template-columns:1fr}.auth-art{display:none}}
 
 /* ---------- landing sections ---------- */
 .lp{max-width:1120px;margin:0 auto;padding:80px 24px 40px;color:var(--text);text-align:left}
 .lp section{margin-bottom:96px}
-.lp-eyebrow{font-size:12px;letter-spacing:.14em;font-weight:700;color:var(--brand-ink,var(--brand));margin:0;text-align:inherit}
+.lp-eyebrow{font-size:12px;letter-spacing:.14em;font-weight:700;color:var(--brand);margin:0;text-align:inherit}
 .lp h2{font-size:clamp(26px,3.2vw,36px);line-height:1.2;margin:10px 0 12px;letter-spacing:-.01em;text-align:center}
 .lp section>.lp-eyebrow{text-align:center}
 .lp-sub{color:var(--muted);line-height:1.7;max-width:620px;margin:0 auto 34px;text-align:center}
-.lp-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
+.lp-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:20px}
 .lp-card{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:26px;transition:transform .25s,border-color .25s}
 .lp-card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--brand) 40%,var(--line))}
 .lp-card h3{margin:6px 0 8px;font-size:18px}
 .lp-card p{margin:0;color:var(--muted);line-height:1.65;font-size:15px}
-.lp-ico{display:grid;place-items:center;width:46px;height:46px;border-radius:12px;margin-bottom:14px;color:var(--brand-ink,var(--brand));background:color-mix(in srgb,var(--brand) 14%,transparent)}
+.lp-ico{display:grid;place-items:center;width:46px;height:46px;border-radius:12px;margin-bottom:14px;color:var(--brand);background:color-mix(in srgb,var(--brand) 14%,transparent)}
 .lp-num{font-size:11px;letter-spacing:.14em;font-weight:700;color:var(--muted)}
 .lp-split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
 .lp-split.rev>*:first-child{order:2}
@@ -4149,7 +5269,7 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .prep-ring .arc{transition:stroke-dashoffset .6s cubic-bezier(.2,.8,.2,1)}
 .prep-bar{height:4px;border-radius:2px;background:var(--line);margin:14px 0 20px;overflow:hidden}
 .prep-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--ok));transition:width .5s cubic-bezier(.2,.8,.2,1)}
-.prep-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:28px}
+.prep-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:28px}
 .prep h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
 .prep-list,.prep-ask{list-style:none;margin:0;padding:0;display:grid;gap:11px}
 .prep-list li{animation:pfxSlide .45s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i,0)*60ms)}
@@ -4157,7 +5277,7 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .prep-list input{accent-color:var(--brand);margin-top:4px;flex:none;width:16px;height:16px}
 .prep-list label:has(input:checked) span{opacity:.55;text-decoration:line-through}
 .prep-ask li{position:relative;padding-left:20px;line-height:1.55;font-size:14.5px}
-.prep-ask li::before{content:"?";position:absolute;left:0;color:var(--brand-ink,var(--brand));font-weight:700}
+.prep-ask li::before{content:"?";position:absolute;left:0;color:var(--brand);font-weight:700}
 .prep-urgent{margin-top:24px;padding:14px 16px;border-radius:12px;border:1px solid color-mix(in srgb,var(--crit) 55%,transparent);background:color-mix(in srgb,var(--crit) 8%,transparent)}
 .prep-urgent b{color:var(--crit)}
 .prep-urgent ul{margin:8px 0 0;padding-left:20px;display:grid;gap:4px;font-size:14px;line-height:1.5}
@@ -4246,14 +5366,14 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .act-opt{padding:12px 14px;text-align:left;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
 .act-opt:not(:disabled):hover{background:var(--surface-2,rgba(120,120,120,.12))}
 .act-opt.ok{border-color:#3fa66b;background:rgba(63,166,107,.14)}.act-opt.bad{border-color:#d4645c;background:rgba(212,100,92,.14)}
-.act-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:end;margin-top:12px}
+.act-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px;align-items:end;margin-top:12px}
 .act-form label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
 .act-note{font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.5;max-width:720px}
 .act-tab{min-height:44px}
 .act-steps{display:flex;gap:8px;flex-wrap:wrap;list-style:none;padding:0;margin:0 0 18px}
 .act-step{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);font:inherit;font-size:14px;cursor:pointer}
 .act-step.on{color:var(--text);border-color:var(--brand);font-weight:600}
-.act-topics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:8px}
+.act-topics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:10px;margin-top:8px}
 .act-topic{display:flex;align-items:center;gap:10px;padding:12px 14px;text-align:left;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--text);font:inherit;cursor:pointer;min-height:44px}
 .act-topic.on{border-color:var(--brand);background:var(--surface-2,rgba(120,120,120,.16));font-weight:600}
 .act-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
@@ -4265,7 +5385,7 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .act-field{display:flex;flex-direction:column;gap:8px;font-size:14px;color:var(--text)}
 .act-area{width:100%;min-height:96px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--text);font:inherit;padding:10px;box-sizing:border-box;resize:vertical}
 .act-nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-.act-btn{padding:11px 18px;border-radius:999px;border:1px solid var(--brand);background:var(--brand);color:var(--on-brand,#fff);font:inherit;font-weight:600;cursor:pointer;min-height:44px}
+.act-btn{padding:11px 18px;border-radius:999px;border:1px solid var(--brand);background:var(--brand);color:var(--on-brand,#2b1a08);font:inherit;font-weight:600;cursor:pointer;min-height:44px}
 .act-btn:disabled{opacity:.45;cursor:not-allowed}
 .act-btn.ghost{background:transparent;color:var(--text);border-color:var(--line);font-weight:500}
 .act-h3{margin:14px 0 6px;font-size:16px;font-weight:600}
@@ -4468,11 +5588,11 @@ function PatientScene() {
       <path d="M212 288q36 6 62 14" stroke="#c98a63" strokeWidth="20" strokeLinecap="round" fill="none" />
       <rect x="138" y="222" width="24" height="34" rx="10" fill="#b9774f" />
       <circle cx="150" cy="190" r="38" fill="#c98a63" />
-      <path d="M110 190c-6-44 36-62 64-52 24 8 34 30 28 52-6-18-22-30-46-30-20 0-38 8-46 30z" fill="#5E3122" />
-      <circle cx="116" cy="172" r="14" fill="#5E3122" /><circle cx="184" cy="168" r="15" fill="#5E3122" /><circle cx="150" cy="148" r="18" fill="#5E3122" />
-      <circle cx="138" cy="194" r="3" fill="#5E3122" /><circle cx="162" cy="194" r="3" fill="#5E3122" />
+      <path d="M110 190c-6-44 36-62 64-52 24 8 34 30 28 52-6-18-22-30-46-30-20 0-38 8-46 30z" fill="#241a22" />
+      <circle cx="116" cy="172" r="14" fill="#241a22" /><circle cx="184" cy="168" r="15" fill="#241a22" /><circle cx="150" cy="148" r="18" fill="#241a22" />
+      <circle cx="138" cy="194" r="3" fill="#241a22" /><circle cx="162" cy="194" r="3" fill="#241a22" />
       <path d="M139 207q11 8 22 0" stroke="#7a3f2c" strokeWidth="3" fill="none" strokeLinecap="round" />
-      <path transform="translate(70 70)" d="M16 27C6 20 2 15 2 10a7 7 0 0114-3 7 7 0 0114 3c0 5-4 10-14 17z" fill="#d9825b" />
+      <path transform="translate(70 70)" d="M16 27C6 20 2 15 2 10a7 7 0 0114-3 7 7 0 0114 3c0 5-4 10-14 17z" fill="#e56b7f" />
       <g transform="translate(222 40)"><path d="M14 36C4 24 0 18 0 12a14 14 0 0128 0c0 6-4 12-14 24z" fill="var(--brand)" /><circle cx="14" cy="12" r="5" fill="#fff" /></g>
     </g>
   </svg>;
@@ -4940,7 +6060,7 @@ function AttentionToday({ reviews = [], name = "", open, go }) {
 
 /* ---- Provider navigation: grouped left sidebar ---- */
 function SideNav({ page, go, waiting, role }) {
-  const groups = NAV.map(([g, items]) => [g, items.filter(([k]) => k !== "home" && !(role === "doctor" && k === "investigation"))]).map(([g, items]) => [g, g === "Account" ? [...items, ["contact", "Contact us", "contact"]] : items]).filter(([, items]) => items.length);
+  const groups = NAV.map(([g, items]) => [g, items.filter(([k]) => k !== "home" && !(role === "doctor" && k === "investigation"))]).map(([g, items]) => [g, g === "Account" ? [...items, ["contact", "Contact us", "contact"]] : items]).map(([g, items]) => [g, g === "Overview" && role === "doctor" ? [...items, ["my-patients", "My patients", "user"]] : items]).filter(([, items]) => items.length);
   return <aside className="sidenav" aria-label="Sections">
     {groups.map(([g, items]) => <div className="sn-group" key={g}>
       <p className="sn-h">{g}</p>
@@ -5035,20 +6155,10 @@ function App() {
   useEffect(() => { if (!toastMsg) return; const t = setTimeout(() => setToastMsg(""), 2400); return () => clearTimeout(t); }, [toastMsg]);
   useEffect(() => { window.scrollTo(0, 0); }, [page]);
 
-  // Never carry one account's reviews over to the next sign-in.
-  useEffect(() => { setReviews([]); setActionPlans([]); setSel(""); }, [googleAuth.email]);
-
   useEffect(() => {
     let cancelled = false;
 
     const loadLiveData = async () => {
-      // Review data is private to each doctor/organization account.
-      if (!googleAuth.signedIn || !["doctor", "organization"].includes(googleAuth.role)) {
-        setReviews([]); setActionPlans([]);
-        setPipelineStats({ reviewsMonitored: 0, analysisCases: 0, actionPlans: 0, averageSeverity: 0, failed: 0 });
-        setApiError(""); setLoading(false);
-        return;
-      }
       const configuredBase = String(settings.api || API.baseUrl || "").trim();
       const base = configuredBase.replace(/\/$/, "");
 
@@ -5176,14 +6286,14 @@ function App() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [settings.api, googleAuth.signedIn, googleAuth.role, googleAuth.email]);
+  }, [settings.api]);
 
   const saveDecision = async (review, status, response) => {
     const configuredBase = String(settings.api || API.baseUrl || "").trim().replace(/\/+$/, "");
     const reviewId = Number(review?.reviewId);
     if (!configuredBase || !Number.isFinite(reviewId) || reviewId <= 0) return;
     try {
-      const res = await apiFetch(`${configuredBase}/reviews/${reviewId}/decision`, {
+      const res = await fetch(`${configuredBase}/reviews/${reviewId}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, response: response || "" }),
@@ -5218,7 +6328,7 @@ function App() {
     if (!window.confirm(`Permanently delete rejected review ${reviewId} and its saved analyses/action plans? This cannot be undone.`)) return;
     const configuredBase = String(settings.api || API.baseUrl || "").trim().replace(/\/+$/, "");
     try {
-      const res = await apiFetch(`${configuredBase}/reviews/${reviewId}`, { method: "DELETE" });
+      const res = await fetch(`${configuredBase}/reviews/${reviewId}`, { method: "DELETE" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.detail || `Delete failed (${res.status})`);
       setReviews(current => current.filter(item => Number(item.reviewId ?? item.database_review_id ?? item.id) !== reviewId));
@@ -5297,6 +6407,8 @@ function App() {
   // dhanyashreemv63@gmail.com keeps the original full review-management console;
   // every other organization/hospital account gets the newer landing page.
   const fullAccess = hasFullAccess(googleAuth);
+  const setAbhaFlag = (v) => setGoogleAuth(a => ({ ...a, hasAbha: !!v }));
+  const setHprFlag = (v) => setGoogleAuth(a => ({ ...a, hasHpr: !!v }));
   const dashboardView = googleAuth.role === "patient"
     ? <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} />
     : (googleAuth.role === "organization" && !fullAccess)
@@ -5304,10 +6416,10 @@ function App() {
       : <Dashboard reviews={reviews} open={open} go={setPage} pipelineStats={pipelineStats} />;
 
   const view = {
-    home: <Home explore={handleExplore} />, "patient-activities": <PatientActivities auth={googleAuth} go={setPage} />, "patient-glow": <PatientGlow auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} onProfileSaved={d => { setGoogleAuth(mapAuth(d)); setToastMsg("Profile saved"); }} />, "patient-appointments": <PatientAppointments apiBaseUrl={settings.api} go={setPage} prefill={apptPrefill} clearPrefill={() => setApptPrefill(null)} prefs={settings} defaultSpecialty={googleAuth.profile?.specialty || ""} />, "patient-dashboard": <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} />, onboarding: <Onboarding apiBaseUrl={settings.api} auth={googleAuth} go={setPage} onSaved={d => { const nextAuth = mapAuth(d); setGoogleAuth(nextAuth); setPage(nextAuth.role === "patient" ? "patient-dashboard" : "dashboard"); setToastMsg("Profile saved"); }} />, login: <GoogleLogin apiBaseUrl={settings.api} go={setPage} signedIn={googleAuth.signedIn} email={googleAuth.email} />, try: <AgentPlayground go={next => { if (next === "try") return; setPage(next); }} apiBaseUrl={settings.api} role={googleAuth.role} />, dashboard: dashboardView, reviews: <Reviews reviews={reviews} open={open} pipelineStats={pipelineStats} />,
+    home: <Home explore={handleExplore} />, "patient-activities": <PatientActivities auth={googleAuth} go={setPage} apiBaseUrl={settings.api} />, "patient-records": <PatientRecords apiBaseUrl={settings.api} go={setPage} />, "patient-glow": <PatientGlow auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} onProfileSaved={d => { setGoogleAuth(mapAuth(d)); setToastMsg("Profile saved"); }} onAbhaChange={setAbhaFlag} />, "patient-appointments": <PatientAppointments apiBaseUrl={settings.api} go={setPage} prefill={apptPrefill} clearPrefill={() => setApptPrefill(null)} prefs={settings} defaultSpecialty={googleAuth.profile?.specialty || ""} auth={googleAuth} />, "patient-dashboard": <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} />, onboarding: <Onboarding apiBaseUrl={settings.api} auth={googleAuth} go={setPage} onSaved={d => { const nextAuth = mapAuth(d); setGoogleAuth(nextAuth); setPage(nextAuth.role === "patient" ? "patient-dashboard" : "dashboard"); setToastMsg("Profile saved"); }} />, login: <GoogleLogin apiBaseUrl={settings.api} go={setPage} signedIn={googleAuth.signedIn} email={googleAuth.email} />, try: <AgentPlayground go={next => { if (next === "try") return; setPage(next); }} apiBaseUrl={settings.api} role={googleAuth.role} />, dashboard: dashboardView, reviews: <Reviews reviews={reviews} open={open} pipelineStats={pipelineStats} />,
     investigation: <Investigation review={review} reviews={reviews} setStatus={setStatus} setResponse={setResponse} go={setPage} toast={setToastMsg} />,
     action: <Action reviews={reviews} open={open} actionPlans={actionPlans} pipelineStats={pipelineStats} />, approval: <Approval reviews={reviews} setStatus={setStatus} onDelete={deleteRejectedReview} open={open} toast={setToastMsg} />,
-    reports: <Reports reviews={reviews} />, settings: googleAuth.role === "patient"
+    reports: <Reports reviews={reviews} />, "my-patients": googleAuth.role === "doctor" ? <DoctorAppointments apiBaseUrl={settings.api} onHprChange={setHprFlag} /> : dashboardView, settings: googleAuth.role === "patient"
       ? <PatientSettings auth={googleAuth} apiBaseUrl={settings.api} settings={settings} setSettings={setSettings} toast={setToastMsg} go={setPage} onLogout={logout} onProfileSaved={d => { setGoogleAuth(mapAuth(d)); setToastMsg("Profile saved"); }} />
       : <Settings settings={settings} setSettings={setSettings} toast={setToastMsg} />, about: <About go={setPage} />, contact: <Contact />,
   }[page];
@@ -5332,7 +6444,7 @@ function App() {
         </> : <>
           {googleAuth.role === "patient" && <nav className="top-nav" aria-label="Main navigation">
             {(googleAuth.role === "patient"
-              ? [["patient-dashboard", "My care", "dash"], ["patient-appointments", "Appointments", "check"], ["patient-glow", "Prep & Perk", "glow"], ["patient-activities", "Activities", "pulse"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
+              ? [["patient-dashboard", "My care", "dash"], ["patient-appointments", "Appointments", "check"], ["patient-records", "My records", "file"], ["patient-glow", "Prep & Perk", "glow"], ["patient-activities", "Activities", "pulse"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
               : []
             ).map(([k, l, ic]) =>
               <button key={k}
@@ -5355,7 +6467,7 @@ function App() {
               aria-expanded={profileOpen}
               style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, whiteSpace: "nowrap", padding: "8px 12px", minHeight: 40 }}
             >
-              {googleAuth.signedIn ? <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: "50%", display: "grid", placeItems: "center", background: "var(--brand)", color: "var(--on-brand, #fff)", fontWeight: 700, fontSize: 13 }}>{String(googleAuth.name || googleAuth.email || "U").trim().charAt(0).toUpperCase()}</span> : <Icon n="user" />}
+              {googleAuth.picture ? <img src={googleAuth.picture} alt="" referrerPolicy="no-referrer" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover" }} /> : <Icon n="user" />}
               <span>{googleAuth.signedIn ? (googleAuth.name || "Profile") : "Sign in"}</span>
               {googleAuth.signedIn && <span aria-hidden="true" style={{ fontSize: 10, opacity: .7 }}>{profileOpen ? "▲" : "▼"}</span>}
             </button>
@@ -5380,10 +6492,12 @@ function App() {
       <div className={"shell" + (showSide ? " has-side" : "")}>
       {showSide && <SideNav page={page} go={setPage} waiting={waiting} role={googleAuth.role} />}
       <main key={fx ? page : "static"} className={"main" + (page === "home" ? " landing-main" : "")}>
-        {apiError && page !== "settings" && page !== "login" && page !== "onboarding" && <div className="panel" role="status" style={{ marginBottom: 16, borderColor: "var(--danger, #d0604f)" }}><b>Backend connection issue</b><p className="small" style={{ margin: "6px 0 0" }}>{apiError}. Check Settings → API connection and verify the dashboard, reviews, investigations, and action-plans endpoints.</p><button className="btn" style={{ marginTop: 10 }} onClick={() => setPage("settings")}>Open API settings</button></div>}
+        {apiError && page !== "settings" && page !== "login" && page !== "onboarding" && <div className="panel" role="status" style={{ marginBottom: 16, borderColor: "var(--danger, #bd7777)" }}><b>Backend connection issue</b><p className="small" style={{ margin: "6px 0 0" }}>{apiError}. Check Settings → API connection and verify the dashboard, reviews, investigations, and action-plans endpoints.</p><button className="btn" style={{ marginTop: 10 }} onClick={() => setPage("settings")}>Open API settings</button></div>}
         {fx && page === "dashboard" && (googleAuth.role === "doctor" || googleAuth.role === "organization") && <AttentionToday name={googleAuth.name} open={open} go={setPage}
-          reviews={reviews} />}
+          reviews={googleAuth.role === "organization" && !fullAccess ? scopeReviewsToOrg(googleAuth.profile?.org_name, reviews).scoped : reviews} />}
         {fx && page === "dashboard" && (googleAuth.role === "doctor" || googleAuth.role === "organization") && <LiveFeed reviews={reviews} />}
+        {page === "dashboard" && googleAuth.role === "doctor" && <DoctorQueueCard apiBaseUrl={settings.api} go={setPage} />}
+        {page === "dashboard" && googleAuth.role === "doctor" && <DoctorHprCard apiBaseUrl={settings.api} onHprChange={setHprFlag} />}
         {view}
       </main>
       </div>
@@ -5397,4 +6511,4 @@ function App() {
   </>;
 }
 
-export default App;
+export default App;

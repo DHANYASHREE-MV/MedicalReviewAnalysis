@@ -11,7 +11,7 @@ from playwright.sync_api import sync_playwright
 
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -39,6 +39,28 @@ engine = create_engine(DB_URI)
 # retrieving reviews (set APIFY_API_KEY in the backend .env to enable it).
 APIFY_API_KEY = os.getenv("APIFY_API_KEY", "").strip()
 APIFY_GOOGLE_MAPS_ACTOR = os.getenv("APIFY_GOOGLE_MAPS_ACTOR", "compass~google-maps-reviews-scraper")
+
+# Table-setup functions only need to succeed once per server start. Running their
+# CREATE/ALTER statements on every request slowed sign-in and every page load
+# (ALTER TABLE also takes a table lock), so each one is wrapped with _run_once.
+import threading as _once_threading
+
+
+def _run_once(fn):
+    state = {"done": False}
+    lock = _once_threading.Lock()
+
+    def wrapper():
+        if state["done"]:
+            return
+        with lock:
+            if not state["done"]:
+                fn()  # if this raises (e.g. DB down), it is retried on the next call
+                state["done"] = True
+    wrapper.__name__ = fn.__name__
+    wrapper.__doc__ = fn.__doc__
+    return wrapper
+
 
 # Confidence fields are added safely for existing databases. Existing records remain valid;
 # NULL means the score was not computed for that historical record.
@@ -72,87 +94,107 @@ app.add_middleware(
 
 # ============================================================
 
-# ---- Per-user ownership: doctors/organizations only ever see reviews they analysed themselves ----
-_LEGACY_OWNER_EMAIL = "dhanyashreemv63@gmail.com"
-_OWNER_COL_READY = False
-
-
-def _ensure_owner_column():
-    global _OWNER_COL_READY
-    if _OWNER_COL_READY:
-        return
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE reviews ADD COLUMN IF NOT EXISTS owner_sub TEXT"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_reviews_owner_sub ON reviews(owner_sub)"))
-    _OWNER_COL_READY = True
-
-
-def _claim_legacy_reviews():
-    """Reviews analysed before ownership existed go to the original account (once it has signed in)."""
-    _ensure_owner_column()
-    ensure_decisions_table()
-    with engine.begin() as conn:
-        conn.execute(text("""
-            UPDATE reviews
-            SET owner_sub = (SELECT google_sub FROM aegiscare_google_users
-                             WHERE lower(email) = :email LIMIT 1)
-            WHERE owner_sub IS NULL
-              AND review_id IN (SELECT review_id FROM review_triage
-                                UNION SELECT review_id FROM review_decisions)
-        """), {"email": _LEGACY_OWNER_EMAIL})
-
-
-def _scope_sub(request: Request):
-    """Signed-in doctor/organization -> their google_sub. Everyone else is rejected."""
-    sub = _require_google_sub(request)
-    if _profile_for_sub(sub).get("role") not in {"doctor", "organization"}:
-        raise HTTPException(status_code=403, detail="Doctor or organization account required.")
-    _ensure_owner_column()
-    return sub
-
-
-def _assert_owns(conn, review_id, sub):
-    ok = conn.execute(text("SELECT 1 FROM reviews WHERE review_id=:r AND owner_sub=:s"),
-                      {"r": review_id, "s": sub}).first()
-    if not ok:
-        raise HTTPException(status_code=404, detail="Review not found.")  # 404 so ids don't leak
-
-
 @app.get("/api/dashboard")
-def dashboard(request: Request):
-    sub = _scope_sub(request)
-    ensure_decisions_table()
-    p = {"s": sub}
-    with engine.connect() as conn:
-        def n(sql):
-            return conn.execute(text(sql), p).scalar() or 0
 
-        total_reviews = n("""
-            SELECT COUNT(*) FROM reviews r
-            WHERE r.owner_sub = :s AND r.review_id IN (
-                SELECT review_id FROM review_triage UNION SELECT review_id FROM review_decisions)
-        """)
-        investigations = n("SELECT COUNT(*) FROM review_triage t JOIN reviews r ON r.review_id=t.review_id WHERE r.owner_sub=:s AND t.route='investigation'")
-        archived = n("SELECT COUNT(*) FROM review_triage t JOIN reviews r ON r.review_id=t.review_id WHERE r.owner_sub=:s AND t.route='archive'")
-        negative = n("SELECT COUNT(*) FROM review_triage t JOIN reviews r ON r.review_id=t.review_id WHERE r.owner_sub=:s AND t.sentiment='negative'")
-        analysis_count = n("SELECT COUNT(*) FROM analysis a JOIN reviews r ON r.review_id=a.review_id WHERE r.owner_sub=:s")
-        action_plan_count = n("SELECT COUNT(*) FROM action_plans ap JOIN reviews r ON r.review_id=ap.review_id WHERE r.owner_sub=:s")
-        average_severity = n("""
-            SELECT COALESCE(AVG(t.severity), 0)
-            FROM analysis a
-            JOIN review_triage t ON a.review_id = t.review_id
-            JOIN reviews r ON r.review_id = a.review_id
-            WHERE r.owner_sub = :s
-        """)
+def dashboard():
+
+    with engine.connect() as conn:
+
+        total_reviews = conn.execute(
+
+            # Analysed reviews only, matching what /api/reviews returns.
+            text("SELECT COUNT(*) FROM reviews r JOIN review_triage t ON t.review_id = r.review_id")
+
+        ).scalar()
+
+        investigations = conn.execute(
+
+            text("""
+
+                SELECT COUNT(*)
+
+                FROM review_triage
+
+                WHERE route = 'investigation'
+
+            """)
+
+        ).scalar()
+
+        archived = conn.execute(
+
+            text("""
+
+                SELECT COUNT(*)
+
+                FROM review_triage
+
+                WHERE route = 'archive'
+
+            """)
+
+        ).scalar()
+
+        negative = conn.execute(
+
+            text("""
+
+                SELECT COUNT(*)
+
+                FROM review_triage
+
+                WHERE sentiment = 'negative'
+
+            """)
+
+        ).scalar()
+
+        analysis_count = conn.execute(
+
+            text("SELECT COUNT(*) FROM analysis")
+
+        ).scalar()
+
+        action_plan_count = conn.execute(
+
+            text("SELECT COUNT(*) FROM action_plans")
+
+        ).scalar()
+
+        # Severity for the reviews that actually reached Agent 2 / analysis.
+
+        average_severity = conn.execute(
+
+            text("""
+
+                SELECT COALESCE(AVG(t.severity), 0)
+
+                FROM analysis a
+
+                JOIN review_triage t
+
+                    ON a.review_id = t.review_id
+
+            """)
+
+        ).scalar()
+
     return {
-        "total_reviews": int(total_reviews),
-        "dataset_reviews": 0,
-        "investigations": int(investigations),
-        "archived": int(archived),
-        "negative": int(negative),
-        "analysis_count": int(analysis_count),
-        "action_plan_count": int(action_plan_count),
-        "average_severity": round(float(average_severity), 2),
+
+        "total_reviews": int(total_reviews or 0),
+
+        "investigations": int(investigations or 0),
+
+        "archived": int(archived or 0),
+
+        "negative": int(negative or 0),
+
+        "analysis_count": int(analysis_count or 0),
+
+        "action_plan_count": int(action_plan_count or 0),
+
+        "average_severity": round(float(average_severity or 0), 2),
+
     }
 
 # ============================================================
@@ -161,14 +203,8 @@ def dashboard(request: Request):
 
 # ============================================================
 
-_DECISIONS_TABLE_READY = False
-
-
 def ensure_decisions_table():
     """Create/upgrade the decision table, including email delivery tracking."""
-    global _DECISIONS_TABLE_READY
-    if _DECISIONS_TABLE_READY:
-        return
     with engine.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS review_decisions (
@@ -185,18 +221,19 @@ def ensure_decisions_table():
         conn.execute(text("ALTER TABLE review_decisions ADD COLUMN IF NOT EXISTS email_status VARCHAR(20) NOT NULL DEFAULT 'not_sent'"))
         conn.execute(text("ALTER TABLE review_decisions ADD COLUMN IF NOT EXISTS email_recipient VARCHAR(320) NOT NULL DEFAULT ''"))
         conn.execute(text("ALTER TABLE review_decisions ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMP NULL"))
-    _DECISIONS_TABLE_READY = True
+
+
+ensure_decisions_table = _run_once(ensure_decisions_table)
 
 
 @app.delete("/api/reviews/{review_id}")
-def delete_review(review_id: int, request: Request):
+def delete_review(review_id: int):
     """Permanently delete a rejected review and its AegisCare analysis records."""
-    sub = _scope_sub(request)
     try:
         ensure_decisions_table()
         with engine.begin() as conn:
             exists = conn.execute(
-                text("SELECT 1 FROM reviews WHERE review_id=:rid AND owner_sub=:sub"), {"rid": review_id, "sub": sub}
+                text("SELECT 1 FROM reviews WHERE review_id=:rid"), {"rid": review_id}
             ).first()
             if not exists:
                 raise HTTPException(status_code=404, detail="Review not found; it may already have been deleted.")
@@ -213,8 +250,7 @@ def delete_review(review_id: int, request: Request):
 
 
 @app.post("/api/reviews/{review_id}/decision")
-def save_review_decision(review_id: int, payload: dict, request: Request):
-    sub = _scope_sub(request)
+def save_review_decision(review_id: int, payload: dict):
     status = str(payload.get("status", "pending")).lower()
     response = str(payload.get("response", "") or "")
     if status not in {"pending", "approved", "rejected", "archived"}:
@@ -222,7 +258,7 @@ def save_review_decision(review_id: int, payload: dict, request: Request):
     try:
         ensure_decisions_table()
         with engine.begin() as conn:
-            if not conn.execute(text("SELECT 1 FROM reviews WHERE review_id=:rid AND owner_sub=:sub"), {"rid": review_id, "sub": sub}).first():
+            if not conn.execute(text("SELECT 1 FROM reviews WHERE review_id=:rid"), {"rid": review_id}).first():
                 raise HTTPException(status_code=404, detail="Review not found.")
             conn.execute(text("""
                 INSERT INTO review_decisions (review_id,status,response,updated_at)
@@ -256,12 +292,11 @@ class EmailDraftResult(BaseModel):
 
 
 @app.post("/api/reviews/{review_id}/generate-email")
-def generate_review_email(review_id: int, payload: GenerateEmailRequest, request: Request):
+def generate_review_email(review_id: int, payload: GenerateEmailRequest):
     """
     Generate an editable email draft from the original review, Agent 2 analysis,
     and Agent 3 action plan. This endpoint does not send email or save a decision.
     """
-    sub = _scope_sub(request)
     with engine.connect() as conn:
         review = conn.execute(text("""
             SELECT r.review_id, r.doctor_name, r.specialty, r.clinic___hospital,
@@ -271,8 +306,8 @@ def generate_review_email(review_id: int, payload: GenerateEmailRequest, request
             FROM reviews r
             LEFT JOIN review_triage t ON t.review_id = r.review_id
             LEFT JOIN analysis a ON a.review_id = r.review_id
-            WHERE r.review_id = :rid AND r.owner_sub = :sub
-        """), {"rid": review_id, "sub": sub}).mappings().first()
+            WHERE r.review_id = :rid
+        """), {"rid": review_id}).mappings().first()
 
         plan_row = conn.execute(text("""
             SELECT priority, objective, immediate_actions, corrective_actions,
@@ -399,9 +434,8 @@ def _send_via_brevo(recipient: str, subject: str, body: str, sender: str):
 
 
 @app.post("/api/reviews/{review_id}/send-approval-email")
-def send_approval_email(review_id: int, payload: dict, request: Request):
+def send_approval_email(review_id: int, payload: dict):
     """Send an approved plan by SMTP; requires explicit UI action and SMTP .env settings."""
-    sub = _scope_sub(request)
     ensure_decisions_table()
     recipient = str(payload.get("recipient", "")).strip()
     # Collapse all whitespace (including newlines) so the subject is a valid email header.
@@ -414,8 +448,8 @@ def send_approval_email(review_id: int, payload: dict, request: Request):
 
     with engine.connect() as conn:
         row = conn.execute(text("""
-            SELECT d.status, d.response, d.email_status FROM review_decisions d JOIN reviews r ON r.review_id=d.review_id WHERE d.review_id=:rid AND r.owner_sub=:sub
-        """), {"rid": review_id, "sub": sub}).mappings().first()
+            SELECT status, response, email_status FROM review_decisions WHERE review_id=:rid
+        """), {"rid": review_id}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="No saved decision found for this review. Approve the plan first.")
     if row["status"] != "approved":
@@ -449,16 +483,14 @@ def send_approval_email(review_id: int, payload: dict, request: Request):
 
 
 @app.get("/api/reviews/{review_id}/decision")
-def get_review_decision(review_id: int, request: Request):
+def get_review_decision(review_id: int):
     """Return the saved approval status and edited action-plan JSON, if present."""
-    sub = _scope_sub(request)
     ensure_decisions_table()
     with engine.connect() as conn:
         row = conn.execute(text("""
-            SELECT d.review_id, d.status, d.response, d.email_status, d.email_recipient, d.email_sent_at, d.updated_at
-            FROM review_decisions d JOIN reviews r ON r.review_id=d.review_id
-            WHERE d.review_id=:rid AND r.owner_sub=:sub
-        """), {"rid": review_id, "sub": sub}).mappings().first()
+            SELECT review_id, status, response, email_status, email_recipient, email_sent_at, updated_at
+            FROM review_decisions WHERE review_id=:rid
+        """), {"rid": review_id}).mappings().first()
     if not row:
         return {"review_id": review_id, "status": "pending", "action_plan": None}
     import json
@@ -471,32 +503,69 @@ def get_review_decision(review_id: int, request: Request):
 
 
 @app.get("/api/reviews")
-def reviews(request: Request, limit: int = 5000, offset: int = 0):
-    """Reviews analysed by the signed-in doctor/organization only."""
-    sub = _scope_sub(request)
+
+def reviews():
+
     ensure_decisions_table()
-    limit = max(1, min(int(limit), 20000))
-    offset = max(0, int(offset))
+
     with engine.connect() as conn:
+
         result = conn.execute(
+
             text("""
+
                 SELECT
-                    r.review_id, r.doctor_name, r.specialty, r.clinic___hospital,
-                    r.overall_rating, r.review_text,
-                    t.sentiment, t.severity, t.category, t.summary, t.route, t.triage_confidence,
+
+                    r.review_id,
+
+                    r.doctor_name,
+
+                    r.specialty,
+
+                    r.clinic___hospital,
+
+                    r.overall_rating,
+
+                    r.review_text,
+
+                    t.sentiment,
+
+                    t.severity,
+
+                    t.category,
+
+                    t.summary,
+
+                    t.route,
+
+                    t.triage_confidence,
+
                     COALESCE(d.status, 'pending') AS approval_status,
+
                     COALESCE(d.response, '') AS saved_response,
+
                     d.updated_at AS decision_updated_at
+
                 FROM reviews r
-                LEFT JOIN review_triage t ON r.review_id = t.review_id
-                LEFT JOIN review_decisions d ON d.review_id = r.review_id
-                WHERE r.owner_sub = :sub
+
+                -- INNER JOIN: only reviews that were analysed (searched in Try It or run
+                -- through the pipeline). The ~1 lakh raw imported rows are not sent.
+                JOIN review_triage t
+
+                    ON r.review_id = t.review_id
+
+                LEFT JOIN review_decisions d
+
+                    ON d.review_id = r.review_id
+
                 ORDER BY r.review_id
-                LIMIT :lim OFFSET :off
-            """),
-            {"sub": sub, "lim": limit, "off": offset},
+
+            """)
+
         )
+
         rows = result.mappings().all()
+
     return rows
 
 # ============================================================
@@ -507,8 +576,7 @@ def reviews(request: Request, limit: int = 5000, offset: int = 0):
 
 @app.get("/api/investigations")
 
-def investigations(request: Request):
-    sub = _scope_sub(request)
+def investigations():
 
     with engine.connect() as conn:
 
@@ -564,12 +632,12 @@ def investigations(request: Request):
 
                     ON r.review_id = a.review_id
 
-                WHERE r.owner_sub = :sub AND t.route = 'investigation'
+                WHERE t.route = 'investigation'
 
                 ORDER BY t.severity DESC, r.review_id
 
-            """),
-            {"sub": sub},
+            """)
+
         )
 
         rows = result.mappings().all()
@@ -584,7 +652,7 @@ def investigations(request: Request):
 
 @app.get("/api/action-plans")
 
-def action_plans(request: Request):
+def action_plans():
 
     """
 
@@ -593,7 +661,6 @@ def action_plans(request: Request):
     This endpoint is read-only. It does not generate or modify plans.
 
     """
-    sub = _scope_sub(request)
 
     with engine.connect() as conn:
 
@@ -631,14 +698,14 @@ def action_plans(request: Request):
 
                 FROM action_plans AS p
 
-                JOIN reviews AS r
+                LEFT JOIN reviews AS r
+
                     ON p.review_id = r.review_id
-                WHERE r.owner_sub = :sub
 
                 ORDER BY p.review_id, p.priority
 
-            """),
-            {"sub": sub},
+            """)
+
         )
 
         # Convert SQLAlchemy RowMapping objects to plain dictionaries.
@@ -962,21 +1029,21 @@ def _action_plan_confidence_estimate(plan, agent2_confidence=0.0):
     return round(max(0.05, min(0.95, 0.35 * completeness + 0.65 * root_conf)), 2)
 
 
-def _persist_pipeline_results(results, hospital_name, owner_sub):
-    _ensure_owner_column()
+def _persist_pipeline_results(results, hospital_name):
     # A single transaction prevents partially saved pipeline batches.
     with engine.begin() as conn:
         next_id = int(conn.execute(text("SELECT COALESCE(MAX(review_id),0)+1 FROM reviews")).scalar() or 1)
         for item in results:
-            if item.get("agent1_error"):
-                continue
             review = item["review"]
             triage = item.get("agent1") or {}
             analysis = item.get("agent2") or {}
             action = item.get("agent3") or {}
             existing_id = review.get("db_review_id")   # set for reviews that came from the imported dataset
-            rid = next_id          # always a new row: imported reviews are copied per user
-            next_id += 1
+            if existing_id:
+                rid = int(existing_id)
+            else:
+                rid = next_id
+                next_id += 1
             item["database_review_id"] = rid
             rating = float(review.get("overall_rating") or 3)
             sentiment = str(triage.get("sentiment") or "neutral").lower()
@@ -994,22 +1061,24 @@ def _persist_pipeline_results(results, hospital_name, owner_sub):
             triage["triage_confidence"] = triage_confidence
             item["agent1"] = triage
 
-            if True:
+            if not existing_id:
                 conn.execute(text("""
                     INSERT INTO reviews
                       (review_id, doctor_name, specialty, clinic___hospital, overall_rating,
-                       review_text, reviewer_name, time_of_review, city, owner_sub)
+                       review_text, reviewer_name, time_of_review, city)
                     VALUES
-                      (:rid,:doctor,:specialty,:clinic,:rating,:review,:reviewer,:review_date,:city,:owner)
+                      (:rid,:doctor,:specialty,:clinic,:rating,:review,:reviewer,:review_date,:city)
                 """), {
-                    "rid": rid, "doctor": str(review.get("doctor_name") or review.get("clinic___hospital") or hospital_name),
-                    "specialty": str(review.get("specialty") or "Hospital review"), "owner": owner_sub,
-                    "clinic": str(review.get("clinic___hospital") or review.get("doctor_name") or hospital_name), "rating": rating,
+                    "rid": rid, "doctor": hospital_name, "specialty": "Hospital review",
+                    "clinic": hospital_name, "rating": rating,
                     "review": str(review.get("review_text") or ""),
                     "reviewer": str(review.get("reviewer_name") or "Reviewer not shown"),
                     "review_date": str(review.get("review_date") or ""),
-                    "city": str(review.get("city") or ""),
+                    "city": "",
                 })
+            else:
+                # Re-analysing an imported review: drop its old plans so they are not duplicated.
+                conn.execute(text("DELETE FROM action_plans WHERE review_id=:rid"), {"rid": rid})
             conn.execute(text("""
                 INSERT INTO review_triage (review_id,sentiment,severity,category,summary,route,triage_confidence)
                 VALUES (:rid,:sentiment,:severity,:category,:summary,:route,:triage_confidence)
@@ -1111,9 +1180,18 @@ def _fetch_apify_reviews(query_or_url, hospital_name, target_count, time_range, 
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Apify review retrieval failed: {exc}") from exc
 
+    if isinstance(items, list):
+        # Some Google Maps actors return places with a nested "reviews" list; flatten those.
+        flat = []
+        for it in items:
+            if isinstance(it, dict) and isinstance(it.get("reviews"), list) and not (it.get("text") or it.get("reviewText")):
+                flat.extend(r for r in it["reviews"] if isinstance(r, dict))
+            elif isinstance(it, dict):
+                flat.append(it)
+        items = flat
     reviews_out = []
     for idx, it in enumerate(items[:target_count] if isinstance(items, list) else []):
-        text_val = str(it.get("text") or it.get("reviewText") or "").strip()
+        text_val = str(it.get("text") or it.get("reviewText") or it.get("textTranslated") or "").strip()
         if not text_val:
             continue
         reviews_out.append({
@@ -1130,76 +1208,75 @@ def _fetch_apify_reviews(query_or_url, hospital_name, target_count, time_range, 
     return reviews_out
 
 
-# Words that appear in almost every hospital/doctor name; they must not be required to match.
-_DATASET_STOPWORDS = {
-    "hospital", "hospitals", "clinic", "clinics", "centre", "center", "dr", "doctor",
-    "the", "and", "of", "for", "in", "at", "a", "an",
-}
+_NAME_TITLE_RE = re.compile(r"^\s*(dr|doctor|prof)\b\.?\s*", re.I)
 
 
-def _dataset_tokens(query):
-    """Split a search string into useful lowercase tokens ('Apollo hospital' -> ['apollo'])."""
-    words = re.findall(r"[a-z0-9]+", str(query or "").lower())
-    useful = [w for w in words if w not in _DATASET_STOPWORDS and len(w) > 1]
-    return useful or words
+def _name_tokens(value):
+    """'Dr. Achala K.P.' -> ['achala', 'k', 'p'] (title and punctuation removed)."""
+    cleaned = _NAME_TITLE_RE.sub("", str(value or "")).lower()
+    return re.findall(r"[a-z0-9]+", cleaned)
 
 
-def _token_regex(tok, whole_word):
-    """Word-start regex for names; whole word (plural allowed) for short disease words so 'ear' never matches 'years'."""
-    if whole_word and len(tok) < 6:
-        return r"\m" + tok + r"(s|es)?\M"
-    return r"\m" + tok
+# The same clean-up done in SQL, so 'Dr Achala KP', 'Achala K. P.' and 'DR. ACHALA K P' all match.
+_SQL_NAME_KEY = "regexp_replace(regexp_replace(lower(COALESCE({col}, '')), '^\\s*(dr|doctor|prof)\\M\\.?', ''), '[^a-z0-9]', '', 'g')"
 
 
-def _fetch_dataset_reviews(provider_type, query, location, limit):
-    """Search reviews already imported into PostgreSQL (the `reviews` table).
+def _fetch_dataset_reviews(provider_type, query, location, limit, debug=None):
+    """Read matching reviews already imported into PostgreSQL (the `reviews` table).
 
-    hospital -> matches clinic___hospital or doctor_name
-    doctor   -> matches doctor_name
-    disease  -> matches review_text, specialty or doctor_name
-    Every word must match; if nothing is found, it retries matching ANY word.
+    Names are matched loosely (title, spaces, dots and case ignored), and the
+    location is a preference: if nothing matches inside it, the search is repeated
+    without it so a doctor stored under 'Bangalore' is still found for 'Jayanagar'.
     """
-    tokens = _dataset_tokens(query)
-    if not tokens:
+    rows = _query_dataset_reviews(provider_type, query, location, limit, debug)
+    if not rows and (location or "").strip():
+        rows = _query_dataset_reviews(provider_type, query, "", limit, debug)
+        if debug is not None and rows:
+            debug["dataset_location_relaxed"] = f"No match inside '{location}', so results from any location are shown."
+    return rows
+
+
+def _query_dataset_reviews(provider_type, query, location, limit, debug=None):
+    q = (query or "").strip()
+    if not q:
         return []
-    limit = max(1, min(int(limit), 5000))
-
+    params = {"q": f"%{q}%", "lim": int(limit)}
+    tokens = _name_tokens(q)
+    params["key"] = "%" + "".join(tokens) + "%" if tokens else f"%{q}%"
+    long_tokens = [t for t in tokens if len(t) >= 3]  # initials such as 'k' / 'p' match too much on their own
+    for i, tok in enumerate(long_tokens[:6]):
+        params[f"t{i}"] = f"%{tok}%"
+    def all_tokens(col):
+        return " AND ".join(f"{col} ILIKE :t{i}" for i in range(len(long_tokens[:6]))) or "FALSE"
     if provider_type == "doctor":
-        columns = ["r.doctor_name"]
+        # 1) compact name match, 2) every name word in doctor_name,
+        # 3) hospital reviews that mention the doctor by name in the text.
+        match_sql = (f"({_SQL_NAME_KEY.format(col='r.doctor_name')} LIKE :key"
+                     f" OR ({all_tokens('r.doctor_name')})"
+                     f" OR ({all_tokens('r.review_text')}))")
     elif provider_type == "disease":
-        columns = ["r.review_text", "r.specialty", "r.doctor_name"]
+        match_sql = "(r.review_text ILIKE :q OR r.specialty ILIKE :q)"
     else:
-        columns = ["r.clinic___hospital", "r.doctor_name"]
-
-    loc_sql, loc_params = "", {}
+        match_sql = ("(r.clinic___hospital ILIKE :q OR r.doctor_name ILIKE :q"
+                     f" OR {_SQL_NAME_KEY.format(col='r.clinic___hospital')} LIKE :key"
+                     f" OR {_SQL_NAME_KEY.format(col='r.doctor_name')} LIKE :key)")
+    loc_sql = ""
     if (location or "").strip():
         loc_sql = "AND (r.city ILIKE ANY(:likes) OR r.clinic___hospital ILIKE ANY(:likes))"
-        loc_params["likes"] = _city_like_patterns(location)
-
-    def run(join_word):
-        params = {"lim": limit, **loc_params}
-        parts = []
-        for i, tok in enumerate(tokens):
-            params[f"t{i}"] = _token_regex(tok, provider_type == "disease")
-            parts.append("(" + " OR ".join(f"{c} ~* :t{i}" for c in columns) + ")")
-        match_sql = "(" + f" {join_word} ".join(parts) + ")"
-        sql = f"""
-            SELECT r.review_id, r.doctor_name, r.specialty, r.clinic___hospital, r.overall_rating,
-                   r.review_text, r.reviewer_name, r.time_of_review, r.city
-            FROM reviews r
-            WHERE {match_sql} {loc_sql}
-              AND COALESCE(TRIM(r.review_text), '') <> ''
-            ORDER BY CASE WHEN r.review_text ~* :phrase THEN 0 ELSE 1 END, r.review_id DESC
-            LIMIT :lim
-        """
-        params["phrase"] = r"\m" + r"\W+".join(tokens)
-        with engine.connect() as conn:
-            return conn.execute(text(sql), params).mappings().all()
-
-    rows = run("AND")
-    if not rows and len(tokens) > 1:
-        rows = run("OR")
-
+        params["likes"] = _city_like_patterns(location)
+    # Exact doctor-name matches first, then reviews that only mention the doctor.
+    order_sql = f"({_SQL_NAME_KEY.format(col='r.doctor_name')} LIKE :key) DESC," if provider_type == "doctor" else ""
+    sql = f"""
+        SELECT r.review_id, r.doctor_name, r.specialty, r.clinic___hospital, r.overall_rating,
+               r.review_text, r.reviewer_name, r.time_of_review, r.city
+        FROM reviews r
+        WHERE {match_sql} {loc_sql}
+          AND COALESCE(TRIM(r.review_text), '') <> ''
+        ORDER BY {order_sql} r.review_id DESC
+        LIMIT :lim
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql), params).mappings().all()
     out = []
     for r in rows:
         try:
@@ -1219,40 +1296,32 @@ def _fetch_dataset_reviews(provider_type, query, location, limit):
     return out
 
 
-@app.get("/api/dataset/search")
-def dataset_search(request: Request, q: str, type: str = "hospital", city: str = "", limit: int = 20):
-    """Search imported reviews by hospital, doctor or disease (no scraping, database only).
+class _ProgressList(list):
+    """A results list that reports each finished review, so the website can show it right away."""
+    def __init__(self, on_append):
+        super().__init__()
+        self._on_append = on_append
 
-    Example: /api/dataset/search?q=apollo&type=hospital&city=bangalore&limit=20
-    """
-    _require_google_sub(request)
-    provider_type = (type or "hospital").strip().lower()
-    if provider_type not in {"hospital", "doctor", "disease"}:
-        raise HTTPException(status_code=400, detail="type must be hospital, doctor or disease.")
-    if not (q or "").strip():
-        raise HTTPException(status_code=400, detail="Enter a hospital, doctor or disease to search.")
-    if not 1 <= limit <= 5000:
-        raise HTTPException(status_code=400, detail="limit must be between 1 and 5000.")
-    try:
-        reviews = _fetch_dataset_reviews(provider_type, q, city, limit)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Imported dataset query failed: {exc}") from exc
-    matched = {}
-    for rv in reviews:
-        name = rv["clinic___hospital"] or rv["doctor_name"] or "Unknown"
-        matched[name] = matched.get(name, 0) + 1
-    return {
-        "query": q, "type": provider_type, "city": city,
-        "count": len(reviews),
-        "matched_names": sorted(matched.items(), key=lambda kv: -kv[1])[:10],
-        "reviews": reviews,
-    }
+    def append(self, item):
+        super().append(item)
+        if self._on_append:
+            self._on_append(self)
 
 
 @app.post("/api/hospital/run-pipeline")
-def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
+def run_hospital_pipeline(payload: HospitalPipelineRequest):
     """Scrape individual Google Maps reviews, run Agent 1, and return trial results."""
-    owner_sub = _require_google_sub(request)
+    return _run_hospital_pipeline_core(payload)
+
+
+def _run_hospital_pipeline_core(payload: HospitalPipelineRequest, progress=None):
+    """The pipeline itself. `progress(stage, **info)` is called at each step when run as a background job."""
+    def report(stage, **info):
+        if progress:
+            try:
+                progress(stage, **info)
+            except Exception as exc:  # progress reporting must never break the pipeline
+                print(f"Pipeline progress update failed: {exc}")
     candidates = [payload.google_maps_url, payload.input, payload.hospital_name]
     raw_input = next((str(v).strip() for v in candidates if v and str(v).strip()), "")
     if not raw_input:
@@ -1283,6 +1352,7 @@ def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
     reviews = []
     debug = {"requested_url": search_url, "source": source, "reviews_time_range": time_range,
              "workflow": "demo-style profile -> Reviews tab -> review cards"}
+    report("retrieving", hospital_name=hospital_name, source=source, requested_review_count=target_count)
 
     # ---- Imported dataset (PostgreSQL) ----
     dataset_query = raw_input
@@ -1301,7 +1371,7 @@ def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
             debug["dataset_skipped"] = "Google Maps URL cannot be matched against the imported dataset."
         else:
             try:
-                dataset_all = _fetch_dataset_reviews(provider_type, dataset_query, location, target_count)
+                dataset_all = _fetch_dataset_reviews(provider_type, dataset_query, location, target_count, debug)
             except Exception as exc:
                 raise HTTPException(status_code=500, detail={
                     "message": f"Imported dataset query failed: {exc}", "stage": "dataset_query"}) from exc
@@ -1537,14 +1607,9 @@ def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
             "next_step": "Try a wider time range (e.g. All time), a different review source, or check that the Reviews tab opened and Google Maps did not require consent/sign-in.",
         })
 
-    import time as _time_pipeline
-    from concurrent.futures import ThreadPoolExecutor
-    batch = reviews[:target_count]
-    _t0 = _time_pipeline.time()
-    print(f"[pipeline] source={source} type={provider_type} query={dataset_query!r}: analysing {len(batch)} reviews", flush=True)
-
-    def _process_review(review):
-        print(f"[pipeline] Agent 1 -> review {review['review_id']}", flush=True)
+    report("analysing", reviews_found=len(reviews[:target_count]), reviews_by_source=debug["reviews_by_source"], debug=debug)
+    results = _ProgressList(lambda done: report("analysing", processed=len(done), results=list(done)))
+    for review in reviews[:target_count]:
         rating = float(review.get("overall_rating") or 3.0)
         # Dataset reviews carry their own doctor / clinic / specialty; Google Maps/Apify reviews use the searched name.
         prov_doctor = str(review.get("doctor_name") or review.get("clinic___hospital") or hospital_name)
@@ -1560,9 +1625,11 @@ def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
             })
             triage = model_to_dict(triage_raw) or {}
         except Exception as exc:
-            print(f"[pipeline] Agent 1 failed for review {review['review_id']}: {exc}", flush=True)
-            return {"review": review, "agent1": {}, "agent1_error": str(exc),
-                    "agent2": None, "agent3": None, "status": "agent1_failed"}
+            raise HTTPException(status_code=500, detail={
+                "message": f"Agent 1 failed for review {review['review_id']}: {exc}",
+                "reviews_extracted": len(reviews),
+                "review_sample": review,
+            }) from exc
 
         triage["triage_confidence"] = _triage_confidence_estimate(review.get("review_text"), rating, triage)
         triage["triage_confidence_type"] = "heuristic_consistency_estimate"
@@ -1608,7 +1675,8 @@ def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
             except Exception as exc:
                 item["agent2_error"] = str(exc)
                 item["status"] = "agent2_failed"
-                return item
+                results.append(item)
+                continue
 
             try:
                 action_raw = run_agent3(
@@ -1635,28 +1703,12 @@ def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
         else:
             item["status"] = "triaged_no_escalation"
 
-        return item
+        results.append(item)
 
-    def _safe_process(review):
-        try:
-            return _process_review(review)
-        except Exception as exc:   # never lose the whole run because of one review
-            print(f"[pipeline] unexpected error on review {review.get('review_id')}: {exc!r}", flush=True)
-            return {"review": review, "agent1": {}, "agent1_error": f"Unexpected error: {exc}",
-                    "agent2": None, "agent3": None, "status": "agent1_failed"}
-
-    workers = max(1, min(int(os.getenv("PIPELINE_WORKERS", "3")), max(1, len(batch))))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(_safe_process, batch))
-    print(f"[pipeline] finished {len(results)} reviews in {_time_pipeline.time() - _t0:.0f}s", flush=True)
-    failed_agent1 = [x for x in results if x.get("agent1_error")]
-    if results and len(failed_agent1) == len(results):
-        raise HTTPException(status_code=500, detail={
-            "message": f"Agent 1 failed for every review. First error: {failed_agent1[0]['agent1_error']}",
-            "reviews_extracted": len(reviews),
-        })
+    results = list(results)
+    report("saving", processed=len(results))
     try:
-        _persist_pipeline_results(results, hospital_name, owner_sub)
+        _persist_pipeline_results(results, hospital_name)
     except Exception as exc:
         raise HTTPException(status_code=500, detail={
             "message": f"Agent run completed but PostgreSQL save failed: {exc}",
@@ -1685,6 +1737,78 @@ def run_hospital_pipeline(payload: HospitalPipelineRequest, request: Request):
         "message": "Reviews and available Agent 1/2/3 results were saved to PostgreSQL. Validate recommendations before acting.",
     }
 
+
+
+# ============================================================
+# PIPELINE AS A BACKGROUND JOB
+#   A long Apify / Google Maps run used to keep one HTTP request open until every
+#   review had passed Agents 1-3. Logs appeared in the terminal while the page
+#   still waited, and a dropped request lost everything. Now the page starts a
+#   job, polls it, and shows each review as soon as it has been analysed.
+#   POST /api/hospital/run-pipeline is unchanged and still works.
+# ============================================================
+import threading as _job_threading
+import uuid as _job_uuid
+import time as _job_time
+from fastapi.encoders import jsonable_encoder as _job_jsonable
+
+_PIPELINE_JOBS = {}
+_PIPELINE_JOBS_LOCK = _job_threading.Lock()
+_PIPELINE_JOB_TTL_SECONDS = 2 * 60 * 60
+
+
+def _prune_pipeline_jobs():
+    cutoff = _job_time.time() - _PIPELINE_JOB_TTL_SECONDS
+    with _PIPELINE_JOBS_LOCK:
+        for job_id in [k for k, v in _PIPELINE_JOBS.items() if v["updated"] < cutoff and v["status"] != "running"]:
+            del _PIPELINE_JOBS[job_id]
+
+
+def _update_pipeline_job(job_id, **changes):
+    with _PIPELINE_JOBS_LOCK:
+        job = _PIPELINE_JOBS.get(job_id)
+        if job is not None:
+            job.update(changes)
+            job["updated"] = _job_time.time()
+
+
+def _pipeline_job_worker(job_id, payload):
+    def progress(stage, **info):
+        changes = {"stage": stage}
+        partial = dict(_PIPELINE_JOBS.get(job_id, {}).get("partial") or {})
+        partial.update(_job_jsonable(info))
+        changes["partial"] = partial
+        _update_pipeline_job(job_id, **changes)
+    try:
+        response = _run_hospital_pipeline_core(payload, progress=progress)
+        _update_pipeline_job(job_id, status="done", stage="done", response=_job_jsonable(response))
+    except HTTPException as exc:
+        _update_pipeline_job(job_id, status="error", stage="error",
+                             error={"status_code": exc.status_code, "detail": _job_jsonable(exc.detail)})
+    except Exception as exc:
+        _update_pipeline_job(job_id, status="error", stage="error",
+                             error={"status_code": 500, "detail": f"Pipeline failed: {exc}"})
+
+
+@app.post("/api/hospital/pipeline-jobs")
+def start_pipeline_job(payload: HospitalPipelineRequest):
+    _prune_pipeline_jobs()
+    job_id = _job_uuid.uuid4().hex
+    with _PIPELINE_JOBS_LOCK:
+        _PIPELINE_JOBS[job_id] = {"status": "running", "stage": "queued", "partial": {},
+                                  "response": None, "error": None, "updated": _job_time.time()}
+    _job_threading.Thread(target=_pipeline_job_worker, args=(job_id, payload), daemon=True).start()
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/hospital/pipeline-jobs/{job_id}")
+def get_pipeline_job(job_id: str):
+    with _PIPELINE_JOBS_LOCK:
+        job = _PIPELINE_JOBS.get(job_id)
+        snapshot = None if job is None else {k: v for k, v in job.items() if k != "updated"}
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="This analysis job was not found. The server may have restarted; please run it again.")
+    return snapshot
 
 
 # ============================================================
@@ -1725,14 +1849,8 @@ _auth_oauth.register(
 )
 
 
-_GOOGLE_TABLE_READY = False
-
-
 def _ensure_google_auth_table():
     """Create the small user table used to remember Google sign-ins."""
-    global _GOOGLE_TABLE_READY
-    if _GOOGLE_TABLE_READY:
-        return
     with engine.begin() as conn:
         conn.execute(_auth_text("""
             CREATE TABLE IF NOT EXISTS aegiscare_google_users (
@@ -1746,37 +1864,12 @@ def _ensure_google_auth_table():
         """))
 
 
-    _GOOGLE_TABLE_READY = True
-
+_ensure_google_auth_table = _run_once(_ensure_google_auth_table)
 
 try:
     _ensure_google_auth_table()
 except Exception as _auth_db_error:
     print(f"Google sign-in table will be initialized when the database is available: {_auth_db_error}")
-
-
-from starlette.concurrency import run_in_threadpool
-
-
-def _save_google_user(google_sub, email, name, picture):
-    """Blocking DB upsert; called through run_in_threadpool so sign-in never blocks the server."""
-    _ensure_google_auth_table()
-    with engine.begin() as conn:
-        conn.execute(_auth_text("""
-            INSERT INTO aegiscare_google_users
-                (google_sub, email, display_name, picture_url, last_login_at)
-            VALUES (:sub, :email, :name, :picture, NOW())
-            ON CONFLICT (google_sub) DO UPDATE SET
-                email = EXCLUDED.email,
-                display_name = EXCLUDED.display_name,
-                picture_url = EXCLUDED.picture_url,
-                last_login_at = NOW()
-        """), {"sub": google_sub, "email": email, "name": name, "picture": picture})
-    if str(email or "").strip().lower() == _LEGACY_OWNER_EMAIL:
-        try:
-            _claim_legacy_reviews()
-        except Exception as exc:
-            print(f"Legacy review claim skipped: {exc}")
 
 
 @app.get("/api/auth/google/start")
@@ -1823,9 +1916,23 @@ async def google_oauth_callback(request: Request):
         raise HTTPException(status_code=403, detail="Please use a Google account with a verified email address.")
 
     try:
-        await run_in_threadpool(
-            _save_google_user, google_sub, email, userinfo.get("name"), userinfo.get("picture")
-        )
+        _ensure_google_auth_table()
+        with engine.begin() as conn:
+            conn.execute(_auth_text("""
+                INSERT INTO aegiscare_google_users
+                    (google_sub, email, display_name, picture_url, last_login_at)
+                VALUES (:sub, :email, :name, :picture, NOW())
+                ON CONFLICT (google_sub) DO UPDATE SET
+                    email = EXCLUDED.email,
+                    display_name = EXCLUDED.display_name,
+                    picture_url = EXCLUDED.picture_url,
+                    last_login_at = NOW()
+            """), {
+                "sub": google_sub,
+                "email": email,
+                "name": userinfo.get("name"),
+                "picture": userinfo.get("picture"),
+            })
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Signed in with Google, but saving the account failed: {exc}") from exc
 
@@ -1855,6 +1962,7 @@ def google_auth_me(request: Request):
         "onboarded": bool(profile.get("role")),
         "role": profile.get("role", ""),
         "profile": profile,
+        **_identity_flags(google_sub),
     }
 
 
@@ -1868,13 +1976,7 @@ def google_auth_logout(request: Request):
 # ============================================================
 # USER PROFILES, PATIENT APPOINTMENTS, AND PERSONAL USAGE
 # ============================================================
-_PROFILE_TABLES_READY = False
-
-
 def _ensure_aegiscare_profile_tables():
-    global _PROFILE_TABLES_READY
-    if _PROFILE_TABLES_READY:
-        return
     with engine.begin() as conn:
         conn.execute(_auth_text("""
             CREATE TABLE IF NOT EXISTS aegiscare_user_profiles (
@@ -1911,8 +2013,7 @@ def _ensure_aegiscare_profile_tables():
             )
         """))
 
-    _PROFILE_TABLES_READY = True
-
+_ensure_aegiscare_profile_tables = _run_once(_ensure_aegiscare_profile_tables)
 
 try:
     _ensure_aegiscare_profile_tables()
@@ -1969,6 +2070,7 @@ def save_aegiscare_profile(payload: dict, request: Request):
         })
     return {"signed_in": True, "onboarded": True, "role": role,
             "profile": _profile_for_sub(google_sub),
+            **_identity_flags(google_sub),
             "user": {"email": request.session.get("google_email"),
                      "name": request.session.get("google_name"),
                      "picture": request.session.get("google_picture")}}
@@ -1978,14 +2080,20 @@ def save_aegiscare_profile(payload: dict, request: Request):
 def list_patient_appointments(request: Request):
     google_sub = _require_google_sub(request)
     _ensure_aegiscare_profile_tables()
+    _ensure_abha_tables()
+    _ensure_care_tables()
     with engine.begin() as conn:
         rows = conn.execute(_auth_text("""
-            SELECT id, provider_name, specialty, appointment_date, appointment_time,
-                   reason, status, created_at
-            FROM aegiscare_patient_appointments
-            WHERE google_sub=:sub ORDER BY created_at DESC LIMIT 20
+            SELECT a.id, a.provider_name, a.specialty, a.appointment_date, a.appointment_time,
+                   a.reason, a.status, a.created_at, a.doctor_sub, a.abha_shared,
+                   a.symptoms, a.diagnosis, a.consultation_notes, a.prescription, a.investigations,
+                   a.follow_up, a.doctor_updated_at, d.display_name AS doctor_name
+            FROM aegiscare_patient_appointments a
+            LEFT JOIN aegiscare_google_users d ON d.google_sub = a.doctor_sub
+            WHERE a.google_sub=:sub ORDER BY a.created_at DESC LIMIT 50
         """), {"sub": google_sub}).mappings().all()
-    return {"items": [dict(r) for r in rows]}
+    # 'requested' (older rows) is shown as 'pending'; doctor updates are included for the patient.
+    return {"items": [_appointment_public(r) for r in rows]}
 
 
 @app.post("/api/appointments")
@@ -1996,20 +2104,44 @@ def create_patient_appointment(payload: dict, request: Request):
     provider_name = str(payload.get("provider_name") or "").strip()
     appointment_date = str(payload.get("appointment_date") or "").strip()
     appointment_time = str(payload.get("appointment_time") or "").strip()
+    _ensure_aegiscare_profile_tables()
+    _ensure_abha_tables()
+    _ensure_care_tables()
+    # Step 6a: optional link to a doctor registered on AegisCare (free text still works).
+    doctor_sub = str(payload.get("doctor_sub") or "").strip() or None
+    # Demo: an appointment booked without choosing a registered doctor goes to the demo doctor,
+    # so it always reaches a doctor dashboard.
+    if not doctor_sub:
+        doctor_sub = DEMO_DOCTOR_SUB
+    if doctor_sub and _profile_for_sub(doctor_sub).get("role") != "doctor":
+        raise HTTPException(status_code=400, detail="The selected doctor is not registered on AegisCare.")
+    if not provider_name and doctor_sub == DEMO_DOCTOR_SUB:
+        provider_name = DEMO_DOCTOR_NAME
     if not provider_name or not appointment_date or not appointment_time:
         raise HTTPException(status_code=400, detail="Enter a doctor/clinic, date, and preferred time.")
-    _ensure_aegiscare_profile_tables()
+    try:
+        if _care_date.fromisoformat(appointment_date[:10]) < _care_date.today():
+            raise HTTPException(status_code=400, detail="Choose today or a future date.")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Enter a valid appointment date.")
+    # Step 6b: per-appointment consent; only possible with a linked doctor and a saved ABHA.
+    abha_shared = bool(payload.get("share_abha")) and bool(doctor_sub) and _abha_row(google_sub) is not None
+    # Patient details travel with the appointment (frozen at booking time).
+    snapshot = _patient_snapshot(google_sub, request, abha_shared)
+    symptoms = str(payload.get("symptoms") or "").strip()[:4000] or None
     with engine.begin() as conn:
         row = conn.execute(_auth_text("""
             INSERT INTO aegiscare_patient_appointments
                 (google_sub, patient_name, provider_name, specialty, appointment_date,
-                 appointment_time, reason, status)
+                 appointment_time, reason, status, doctor_sub, abha_shared, symptoms, patient_snapshot)
             VALUES (:sub, :patient, :provider, :specialty, CAST(:date AS DATE),
-                    :time, :reason, 'requested')
+                    :time, :reason, 'pending', :doctor_sub, :abha_shared, :symptoms, CAST(:snapshot AS JSONB))
             RETURNING id, provider_name, specialty, appointment_date, appointment_time,
-                      reason, status, created_at
+                      reason, status, created_at, doctor_sub, abha_shared, symptoms
         """), {
-            "sub": google_sub, "patient": request.session.get("google_name"),
+            "doctor_sub": doctor_sub, "abha_shared": abha_shared,
+            "symptoms": symptoms, "snapshot": _care_json.dumps(snapshot, default=str),
+            "sub": google_sub, "patient": snapshot.get("name") or request.session.get("google_name"),
             "provider": provider_name, "specialty": str(payload.get("specialty") or "").strip() or None,
             "date": appointment_date, "time": appointment_time,
             "reason": str(payload.get("reason") or "").strip() or None,
@@ -2057,6 +2189,1013 @@ def record_try_it_usage(request: Request):
             FROM aegiscare_user_usage WHERE google_sub=:sub
         """), {"sub": google_sub}).mappings().one()
     return dict(row)
+
+
+# ============================================================
+# ABHA (patients) + HPR ID (doctors) + doctor <-> patient link
+#
+#   Step 1  aegiscare_patient_abha  - kept apart from aegiscare_user_profiles
+#           so POST /api/profile (which rewrites every profile column) can
+#           never erase it, and so the sensitive health ID has its own access
+#           rules. UNIQUE stops two accounts claiming the same ABHA.
+#   Step 2  Format checks only. Ownership is NOT proven until ABDM's official
+#           API is integrated, so every ID is stored with verified = FALSE and
+#           shown as "Self-declared".
+#   Step 3  GET / PUT / DELETE /api/patient/abha  (+ has_abha in /api/auth/me)
+#   Step 6  doctor_sub + abha_shared on appointments, GET /api/doctors,
+#           GET /api/doctor/patients, per-appointment consent, access audit log.
+#   Step 7  aegiscare_doctor_hpr - optional, self-declared HPR ID for doctors.
+# ============================================================
+from sqlalchemy.exc import IntegrityError as _AbhaIntegrityError
+
+ABHA_NUMBER_RE = re.compile(r"^\d{14}$")
+# ABHA address: 8-18 characters (letters, digits, "." or "_", not at the ends)
+# followed by @abdm (production) or @sbx (ABDM sandbox).
+ABHA_ADDRESS_RE = re.compile(r"^[a-z0-9][a-z0-9._]{6,16}[a-z0-9]@(abdm|sbx)$")
+# HPR ID: 14-digit number, or an HPR address such as dr.name@hpr.
+HPR_NUMBER_RE = re.compile(r"^\d{14}$")
+HPR_ADDRESS_RE = re.compile(r"^[a-z0-9][a-z0-9._]{2,30}[a-z0-9]@hpr$")
+
+
+def _ensure_abha_tables():
+    _ensure_aegiscare_profile_tables()
+    with engine.begin() as conn:
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_patient_abha (
+                google_sub TEXT PRIMARY KEY,
+                abha_number TEXT UNIQUE,
+                abha_address TEXT UNIQUE,
+                verified BOOLEAN NOT NULL DEFAULT FALSE,
+                share_with_doctors BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CHECK (abha_number IS NOT NULL OR abha_address IS NOT NULL)
+            )
+        """))
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_doctor_hpr (
+                google_sub TEXT PRIMARY KEY,
+                hpr_id TEXT NOT NULL UNIQUE,
+                verified BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        # Every time a doctor reveals a patient's full ABHA, it is logged.
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_abha_access_log (
+                id BIGSERIAL PRIMARY KEY,
+                doctor_sub TEXT NOT NULL,
+                patient_sub TEXT NOT NULL,
+                appointment_id BIGINT NOT NULL,
+                accessed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        # If any of these tables already existed from an earlier version, CREATE TABLE IF NOT
+        # EXISTS skipped it, so add any column it is missing (safe to run on every start).
+        for table, columns in {
+            "aegiscare_patient_abha": [
+                ("abha_number", "TEXT"), ("abha_address", "TEXT"),
+                ("verified", "BOOLEAN NOT NULL DEFAULT FALSE"),
+                ("share_with_doctors", "BOOLEAN NOT NULL DEFAULT FALSE"),
+                ("updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()"),
+            ],
+            "aegiscare_doctor_hpr": [
+                ("hpr_id", "TEXT"),
+                ("verified", "BOOLEAN NOT NULL DEFAULT FALSE"),
+                ("updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()"),
+            ],
+            "aegiscare_abha_access_log": [
+                ("doctor_sub", "TEXT"), ("patient_sub", "TEXT"), ("appointment_id", "BIGINT"),
+                ("accessed_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()"),
+            ],
+        }.items():
+            for column, ddl in columns:
+                conn.execute(_auth_text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}"))
+        # Existing appointment rows keep working: both new columns are optional.
+        conn.execute(_auth_text("ALTER TABLE aegiscare_patient_appointments ADD COLUMN IF NOT EXISTS doctor_sub TEXT"))
+        conn.execute(_auth_text("ALTER TABLE aegiscare_patient_appointments ADD COLUMN IF NOT EXISTS abha_shared BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_appt_doctor ON aegiscare_patient_appointments (doctor_sub)"))
+    # Older tables may lack the UNIQUE rules that block one ID on two accounts.
+    # Each index is created separately so one failure (e.g. existing duplicates) doesn't stop the rest.
+    for index_sql in (
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_aegiscare_abha_sub ON aegiscare_patient_abha (google_sub)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_aegiscare_hpr_sub ON aegiscare_doctor_hpr (google_sub)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_aegiscare_abha_number ON aegiscare_patient_abha (abha_number)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_aegiscare_abha_address ON aegiscare_patient_abha (abha_address)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_aegiscare_hpr_id ON aegiscare_doctor_hpr (hpr_id)",
+    ):
+        try:
+            with engine.begin() as conn:
+                conn.execute(_auth_text(index_sql))
+        except Exception as exc:
+            print(f"Could not add unique index ({index_sql.split(' ON ')[0]}): {exc}")
+
+
+_ensure_abha_tables = _run_once(_ensure_abha_tables)
+
+try:
+    _ensure_abha_tables()
+except Exception as _abha_db_error:
+    print(f"ABHA tables will initialize when the database is available: {_abha_db_error}")
+
+
+def _normalize_abha_number(value):
+    """Return the 14 ABHA digits, '' when empty, or raise 400 on a bad format."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    digits = re.sub(r"[\s-]", "", raw)
+    if not ABHA_NUMBER_RE.match(digits):
+        raise HTTPException(status_code=400, detail="ABHA number must be 14 digits, e.g. 91-1234-5678-9012.")
+    return digits
+
+
+def _normalize_abha_address(value):
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    if not ABHA_ADDRESS_RE.match(raw):
+        raise HTTPException(
+            status_code=400,
+            detail="ABHA address must look like yourname@abdm (8-18 letters, numbers, '.' or '_').",
+        )
+    return raw
+
+
+def _normalize_hpr_id(value):
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    digits = re.sub(r"[\s-]", "", raw)
+    if HPR_NUMBER_RE.match(digits):
+        return digits
+    if HPR_ADDRESS_RE.match(raw):
+        return raw
+    raise HTTPException(status_code=400, detail="HPR ID must be 14 digits or an HPR address like dr.name@hpr.")
+
+
+def _format_14(digits):
+    return f"{digits[0:2]}-{digits[2:6]}-{digits[6:10]}-{digits[10:14]}" if digits and len(digits) == 14 else (digits or "")
+
+
+def _mask_14(digits):
+    return f"XX-XXXX-XXXX-{digits[-4:]}" if digits and len(digits) == 14 else ""
+
+
+def _mask_address(address):
+    if not address or "@" not in address:
+        return address or ""
+    name, domain = address.split("@", 1)
+    return f"{name[:2]}{'*' * max(3, len(name) - 2)}@{domain}"
+
+
+def _abha_row(google_sub):
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("""
+            SELECT abha_number, abha_address, verified, share_with_doctors, updated_at
+            FROM aegiscare_patient_abha WHERE google_sub=:sub
+        """), {"sub": google_sub}).mappings().first()
+    return dict(row) if row else None
+
+
+def _abha_public(row, reveal=False):
+    """Shape an ABHA row for the API; the full number is returned only on request."""
+    if not row:
+        return None
+    number = row.get("abha_number") or ""
+    address = row.get("abha_address") or ""
+    return {
+        "abha_number_masked": _mask_14(number),
+        "abha_number": _format_14(number) if reveal else None,
+        "abha_address_masked": _mask_address(address),
+        "abha_address": address if reveal else None,
+        "has_number": bool(number),
+        "has_address": bool(address),
+        "verified": bool(row.get("verified")),
+        "status": "Verified" if row.get("verified") else "Self-declared",
+        "share_with_doctors": bool(row.get("share_with_doctors")),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _identity_flags(google_sub):
+    """Small flags merged into /api/auth/me and /api/profile so the UI needs no extra request."""
+    try:
+        _ensure_abha_tables()
+        with engine.begin() as conn:
+            has_abha = conn.execute(_auth_text(
+                "SELECT 1 FROM aegiscare_patient_abha WHERE google_sub=:sub"), {"sub": google_sub}).first() is not None
+            has_hpr = conn.execute(_auth_text(
+                "SELECT 1 FROM aegiscare_doctor_hpr WHERE google_sub=:sub"), {"sub": google_sub}).first() is not None
+        return {"has_abha": has_abha, "has_hpr": has_hpr}
+    except Exception as exc:
+        print(f"Could not read ABHA/HPR flags: {exc}")
+        return {"has_abha": False, "has_hpr": False}
+
+
+def _require_role(request: Request, role: str, message: str):
+    google_sub = _require_google_sub(request)
+    if _profile_for_sub(google_sub).get("role") != role:
+        raise HTTPException(status_code=403, detail=message)
+    return google_sub
+
+
+# ---------------------------- Step 3: patient ABHA ----------------------------
+@app.get("/api/patient/abha")
+def get_patient_abha(request: Request, reveal: bool = False):
+    google_sub = _require_google_sub(request)
+    _ensure_abha_tables()
+    return {"abha": _abha_public(_abha_row(google_sub), reveal=reveal)}
+
+
+@app.put("/api/patient/abha")
+def save_patient_abha(payload: dict, request: Request):
+    google_sub = _require_role(request, "patient", "Only patient accounts can add an ABHA.")
+    number = _normalize_abha_number(payload.get("abha_number"))
+    address = _normalize_abha_address(payload.get("abha_address"))
+    if not number and not address:
+        raise HTTPException(status_code=400, detail="Enter your 14-digit ABHA number or your ABHA address.")
+    share = bool(payload.get("share_with_doctors", False))
+    _ensure_abha_tables()
+    try:
+        with engine.begin() as conn:
+            # Changing the ID always resets verified to FALSE.
+            conn.execute(_auth_text("""
+                INSERT INTO aegiscare_patient_abha
+                    (google_sub, abha_number, abha_address, verified, share_with_doctors, updated_at)
+                VALUES (:sub, :number, :address, FALSE, :share, NOW())
+                ON CONFLICT (google_sub) DO UPDATE SET
+                    abha_number=EXCLUDED.abha_number, abha_address=EXCLUDED.abha_address,
+                    verified=FALSE, share_with_doctors=EXCLUDED.share_with_doctors, updated_at=NOW()
+            """), {"sub": google_sub, "number": number or None, "address": address or None, "share": share})
+    except _AbhaIntegrityError:
+        raise HTTPException(status_code=409, detail="This ABHA is already linked to another account.")
+    return {"abha": _abha_public(_abha_row(google_sub)), "has_abha": True, "message": "ABHA saved."}
+
+
+@app.patch("/api/patient/abha/sharing")
+def update_patient_abha_sharing(payload: dict, request: Request):
+    """Change only the default 'Share with my doctors' choice."""
+    google_sub = _require_role(request, "patient", "Only patient accounts have an ABHA.")
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        updated = conn.execute(_auth_text("""
+            UPDATE aegiscare_patient_abha SET share_with_doctors=:share, updated_at=NOW()
+            WHERE google_sub=:sub
+        """), {"sub": google_sub, "share": bool(payload.get("share_with_doctors"))}).rowcount
+    if not updated:
+        raise HTTPException(status_code=404, detail="Add your ABHA first.")
+    return {"abha": _abha_public(_abha_row(google_sub))}
+
+
+@app.delete("/api/patient/abha")
+def delete_patient_abha(request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        conn.execute(_auth_text("DELETE FROM aegiscare_patient_abha WHERE google_sub=:sub"), {"sub": google_sub})
+        # Removing the ABHA also withdraws every per-appointment consent.
+        conn.execute(_auth_text(
+            "UPDATE aegiscare_patient_appointments SET abha_shared=FALSE WHERE google_sub=:sub"), {"sub": google_sub})
+    return {"abha": None, "has_abha": False, "message": "ABHA removed."}
+
+
+@app.patch("/api/appointments/{appointment_id}/abha-share")
+def update_appointment_abha_share(appointment_id: int, payload: dict, request: Request):
+    """Step 6b: the patient gives or withdraws consent for one appointment."""
+    google_sub = _require_role(request, "patient", "Only patients can change ABHA sharing.")
+    share = bool(payload.get("share"))
+    _ensure_abha_tables()
+    if share and not _abha_row(google_sub):
+        raise HTTPException(status_code=400, detail="Add your ABHA before sharing it.")
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("""
+            UPDATE aegiscare_patient_appointments SET abha_shared=:share
+            WHERE id=:id AND google_sub=:sub AND doctor_sub IS NOT NULL
+            RETURNING id, abha_shared
+        """), {"id": appointment_id, "sub": google_sub, "share": share}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Appointment not found or not linked to an AegisCare doctor.")
+    return dict(row)
+
+
+# ---------------------------- Step 6a: find registered doctors ----------------------------
+@app.get("/api/doctors")
+def search_registered_doctors(request: Request, q: str = ""):
+    _require_google_sub(request)
+    _ensure_abha_tables()
+    term = f"%{q.strip()[:80]}%"
+    with engine.begin() as conn:
+        rows = conn.execute(_auth_text("""
+            SELECT p.google_sub AS doctor_sub, COALESCE(u.display_name, 'Doctor') AS name,
+                   p.specialty, p.org_name, p.city, (h.google_sub IS NOT NULL) AS has_hpr
+            FROM aegiscare_user_profiles p
+            LEFT JOIN aegiscare_google_users u ON u.google_sub = p.google_sub
+            LEFT JOIN aegiscare_doctor_hpr h ON h.google_sub = p.google_sub
+            WHERE p.role = 'doctor'
+              AND (u.display_name ILIKE :q OR p.specialty ILIKE :q OR p.org_name ILIKE :q OR p.city ILIKE :q)
+            ORDER BY u.display_name NULLS LAST
+            LIMIT 20
+        """), {"q": term}).mappings().all()
+    return {"items": [dict(r) for r in rows]}
+
+
+# ---------------------------- Step 6c: doctor's patients ----------------------------
+@app.get("/api/doctor/patients")
+def list_doctor_patients(request: Request):
+    doctor_sub, scope = _doctor_scope(request)
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        rows = conn.execute(_auth_text("""
+            SELECT a.id, a.patient_name, a.specialty, a.appointment_date, a.appointment_time,
+                   a.reason, a.status, a.created_at, a.abha_shared,
+                   ab.abha_number, ab.abha_address, ab.verified
+            FROM aegiscare_patient_appointments a
+            LEFT JOIN aegiscare_patient_abha ab ON ab.google_sub = a.google_sub
+            WHERE a.doctor_sub = ANY(:scope)
+            ORDER BY a.appointment_date DESC, a.created_at DESC
+            LIMIT 200
+        """), {"scope": scope}).mappings().all()
+    items = []
+    for r in rows:
+        shared = bool(r["abha_shared"]) and bool(r["abha_number"] or r["abha_address"])
+        items.append({
+            "id": r["id"], "patient_name": r["patient_name"], "specialty": r["specialty"],
+            "appointment_date": r["appointment_date"], "appointment_time": r["appointment_time"],
+            "reason": r["reason"], "status": r["status"], "created_at": r["created_at"],
+            "abha_shared": shared,
+            # Only a masked value is ever listed; the full ID needs the reveal endpoint below.
+            "abha_masked": (_mask_14(r["abha_number"] or "") or _mask_address(r["abha_address"] or "")) if shared else None,
+            "abha_status": ("Verified" if r["verified"] else "Self-declared") if shared else "Not shared",
+        })
+    return {"items": items}
+
+
+@app.get("/api/doctor/patients/{appointment_id}/abha")
+def reveal_doctor_patient_abha(appointment_id: int, request: Request):
+    doctor_sub, scope = _doctor_scope(request)
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("""
+            SELECT a.google_sub AS patient_sub, a.abha_shared,
+                   ab.abha_number, ab.abha_address, ab.verified
+            FROM aegiscare_patient_appointments a
+            LEFT JOIN aegiscare_patient_abha ab ON ab.google_sub = a.google_sub
+            WHERE a.id = :id AND a.doctor_sub = ANY(:scope)
+        """), {"id": appointment_id, "scope": scope}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Appointment not found.")
+        if not row["abha_shared"] or not (row["abha_number"] or row["abha_address"]):
+            raise HTTPException(status_code=403, detail="The patient has not shared their ABHA for this appointment.")
+        conn.execute(_auth_text("""
+            INSERT INTO aegiscare_abha_access_log (doctor_sub, patient_sub, appointment_id)
+            VALUES (:doc, :pat, :id)
+        """), {"doc": doctor_sub, "pat": row["patient_sub"], "id": appointment_id})
+    return {
+        "abha_number": _format_14(row["abha_number"] or "") or None,
+        "abha_address": row["abha_address"],
+        "status": "Verified" if row["verified"] else "Self-declared",
+    }
+
+
+# ---------------------------- Step 7: doctor's own HPR ID ----------------------------
+@app.get("/api/doctor/hpr")
+def get_doctor_hpr(request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text(
+            "SELECT hpr_id, verified, updated_at FROM aegiscare_doctor_hpr WHERE google_sub=:sub"),
+            {"sub": google_sub}).mappings().first()
+    if not row:
+        return {"hpr": None}
+    hpr = row["hpr_id"]
+    return {"hpr": {"hpr_id": _format_14(hpr) if hpr.isdigit() else hpr, "verified": bool(row["verified"]),
+                    "status": "Verified" if row["verified"] else "Self-declared", "updated_at": row["updated_at"]}}
+
+
+@app.put("/api/doctor/hpr")
+def save_doctor_hpr(payload: dict, request: Request):
+    google_sub = _require_role(request, "doctor", "Only doctor accounts can add an HPR ID.")
+    hpr = _normalize_hpr_id(payload.get("hpr_id"))
+    if not hpr:
+        raise HTTPException(status_code=400, detail="Enter your HPR ID.")
+    _ensure_abha_tables()
+    try:
+        with engine.begin() as conn:
+            conn.execute(_auth_text("""
+                INSERT INTO aegiscare_doctor_hpr (google_sub, hpr_id, verified, updated_at)
+                VALUES (:sub, :hpr, FALSE, NOW())
+                ON CONFLICT (google_sub) DO UPDATE SET hpr_id=EXCLUDED.hpr_id, verified=FALSE, updated_at=NOW()
+            """), {"sub": google_sub, "hpr": hpr})
+    except _AbhaIntegrityError:
+        raise HTTPException(status_code=409, detail="This HPR ID is already linked to another account.")
+    return {**get_doctor_hpr(request), "has_hpr": True}
+
+
+@app.delete("/api/doctor/hpr")
+def delete_doctor_hpr(request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        conn.execute(_auth_text("DELETE FROM aegiscare_doctor_hpr WHERE google_sub=:sub"), {"sub": google_sub})
+    return {"hpr": None, "has_hpr": False}
+
+
+# ============================================================
+# CARE RECORD: demo doctor, patient health profile, medical reports,
+# appointment workflow (pending -> confirmed -> completed / cancelled),
+# doctor patient profile, diagnosis / notes / prescriptions.
+#
+# Access rules
+#   * A patient only ever reads or writes rows with their own google_sub.
+#   * A doctor sees a patient ONLY through an appointment that patient booked
+#     with them (or with the demo doctor, see below). Every doctor endpoint is
+#     keyed by appointment id and re-checks that link, so a doctor can never
+#     list or open patients who have not booked with them.
+#   * Demo doctor: appointments booked without choosing a doctor go to one
+#     seeded demo doctor. AEGISCARE_DEMO_DOCTOR_ACCESS decides which signed-in
+#     doctor accounts work that demo doctor's queue:
+#       "all" (default)        -> every account with the Doctor role
+#       "a@x.com,b@y.com"      -> only these emails
+#       "none"                 -> nobody (turn the demo off)
+# ============================================================
+import base64 as _care_b64
+import json as _care_json
+from datetime import date as _care_date
+from fastapi.responses import Response as _CareResponse
+
+DEMO_DOCTOR_SUB = "aegiscare-demo-doctor"
+DEMO_DOCTOR_NAME = os.getenv("AEGISCARE_DEMO_DOCTOR_NAME", "Dr. Demo Doctor (AegisCare)")
+DEMO_DOCTOR_SPECIALTY = os.getenv("AEGISCARE_DEMO_DOCTOR_SPECIALTY", "General Physician")
+DEMO_DOCTOR_CLINIC = os.getenv("AEGISCARE_DEMO_DOCTOR_CLINIC", "AegisCare Demo Clinic")
+DEMO_DOCTOR_ACCESS = os.getenv("AEGISCARE_DEMO_DOCTOR_ACCESS", "all").strip()
+
+APPOINTMENT_STATUSES = ("pending", "confirmed", "completed", "cancelled")
+REPORT_CATEGORIES = ("Blood Tests", "Scans", "Prescriptions", "Discharge Summaries", "Other Reports")
+REPORT_MAX_BYTES = int(os.getenv("AEGISCARE_REPORT_MAX_MB", "10")) * 1024 * 1024
+LAB_REPORT_CATEGORIES = ("Blood Tests", "Scans")
+
+# Text fields of the patient health profile -> max length.
+HEALTH_TEXT_FIELDS = {
+    "full_name": 120, "date_of_birth": 10, "gender": 30, "phone": 30, "contact_email": 200,
+    "address": 400, "emergency_contact": 200, "blood_group": 5,
+    "existing_conditions": 4000, "past_history": 4000, "surgeries": 2000, "family_history": 2000,
+    "allergies": 2000, "medications": 4000, "previous_diagnoses": 4000,
+    "current_symptoms": 4000, "concerns": 4000, "notes_for_doctor": 4000, "lifestyle": 2000,
+}
+HEALTH_NUMBER_FIELDS = {"age": (0, 130), "height_cm": (30, 260), "weight_kg": (1, 400)}
+GENDER_OPTIONS = {"female", "male", "non-binary", "other", "prefer not to say"}
+
+
+def _ensure_care_tables():
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_patient_health (
+                google_sub TEXT PRIMARY KEY,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        for col in HEALTH_TEXT_FIELDS:
+            conn.execute(_auth_text(f"ALTER TABLE aegiscare_patient_health ADD COLUMN IF NOT EXISTS {col} TEXT"))
+        for col in HEALTH_NUMBER_FIELDS:
+            conn.execute(_auth_text(f"ALTER TABLE aegiscare_patient_health ADD COLUMN IF NOT EXISTS {col} DOUBLE PRECISION"))
+        conn.execute(_auth_text("ALTER TABLE aegiscare_patient_health ADD COLUMN IF NOT EXISTS checklist JSONB NOT NULL DEFAULT '{}'::jsonb"))
+
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_medical_reports (
+                id BIGSERIAL PRIMARY KEY,
+                google_sub TEXT NOT NULL,
+                title TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'Other Reports',
+                report_date DATE,
+                notes TEXT,
+                file_name TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                data BYTEA NOT NULL,
+                uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_reports_sub ON aegiscare_medical_reports (google_sub)"))
+
+        for col, ddl in [
+            ("symptoms", "TEXT"), ("patient_snapshot", "JSONB"), ("diagnosis", "TEXT"),
+            ("consultation_notes", "TEXT"), ("prescription", "JSONB"), ("investigations", "TEXT"),
+            ("follow_up", "TEXT"), ("doctor_updated_at", "TIMESTAMPTZ"),
+        ]:
+            conn.execute(_auth_text(f"ALTER TABLE aegiscare_patient_appointments ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+        conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_appt_patient ON aegiscare_patient_appointments (google_sub)"))
+
+        # Seed the demo doctor (idempotent). It has no Google login of its own.
+        conn.execute(_auth_text("""
+            INSERT INTO aegiscare_google_users (google_sub, email, display_name)
+            VALUES (:sub, 'demo.doctor@aegiscare.local', :name)
+            ON CONFLICT (google_sub) DO UPDATE SET display_name = EXCLUDED.display_name
+        """), {"sub": DEMO_DOCTOR_SUB, "name": DEMO_DOCTOR_NAME})
+        conn.execute(_auth_text("""
+            INSERT INTO aegiscare_user_profiles (google_sub, role, org_name, specialty, city, updated_at)
+            VALUES (:sub, 'doctor', :clinic, :spec, NULL, NOW())
+            ON CONFLICT (google_sub) DO UPDATE SET role='doctor', org_name=EXCLUDED.org_name,
+                specialty=EXCLUDED.specialty, updated_at=NOW()
+        """), {"sub": DEMO_DOCTOR_SUB, "clinic": DEMO_DOCTOR_CLINIC, "spec": DEMO_DOCTOR_SPECIALTY})
+
+
+_ensure_care_tables = _run_once(_ensure_care_tables)
+
+try:
+    _ensure_care_tables()
+except Exception as _care_db_error:
+    print(f"Care-record tables will initialize when the database is available: {_care_db_error}")
+
+
+# ---------------------------- helpers ----------------------------
+def _age_from(dob, fallback_age=None):
+    try:
+        if dob:
+            d = _care_date.fromisoformat(str(dob)[:10])
+            today = _care_date.today()
+            return today.year - d.year - ((today.month, today.day) < (d.month, d.day))
+    except ValueError:
+        pass
+    return int(fallback_age) if fallback_age not in (None, "") else None
+
+
+def _health_row(google_sub):
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("SELECT * FROM aegiscare_patient_health WHERE google_sub=:sub"),
+                           {"sub": google_sub}).mappings().first()
+    if not row:
+        return {}
+    out = dict(row)
+    out.pop("google_sub", None)
+    out["age"] = _age_from(out.get("date_of_birth"), out.get("age"))
+    return out
+
+
+def _account_name_email(google_sub):
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("SELECT display_name, email FROM aegiscare_google_users WHERE google_sub=:sub"),
+                           {"sub": google_sub}).mappings().first()
+    return (row["display_name"], row["email"]) if row else (None, None)
+
+
+def _doctor_scope(request: Request):
+    """Doctor subs whose appointments the signed-in doctor may work on (self + demo doctor if allowed)."""
+    doctor_sub = _require_role(request, "doctor", "Only doctor accounts can view patients.")
+    subs = [doctor_sub]
+    access = DEMO_DOCTOR_ACCESS.lower()
+    email = str(request.session.get("google_email") or "").strip().lower()
+    if access == "all" or (access not in ("", "none") and email in {e.strip().lower() for e in access.split(",")}):
+        subs.append(DEMO_DOCTOR_SUB)
+    return doctor_sub, subs
+
+
+def _norm_status(value):
+    s = str(value or "").strip().lower()
+    return "pending" if s in ("", "requested") else s
+
+
+def _clean_prescription(items):
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="Prescription must be a list of medicines.")
+    out = []
+    for it in items[:30]:
+        if not isinstance(it, dict):
+            continue
+        row = {k: str(it.get(k) or "").strip()[:300] for k in ("medicine", "dose", "frequency", "duration", "instructions")}
+        if row["medicine"]:
+            out.append(row)
+    return out
+
+
+def _appointment_public(row):
+    d = dict(row)
+    d["status"] = _norm_status(d.get("status"))
+    for k in ("prescription", "patient_snapshot"):
+        if isinstance(d.get(k), str):
+            try:
+                d[k] = _care_json.loads(d[k])
+            except ValueError:
+                pass
+    d.pop("google_sub", None)
+    return d
+
+
+def _patient_snapshot(google_sub, request: Request, abha_shared: bool):
+    """What the doctor receives with the appointment, frozen at booking time."""
+    h = _health_row(google_sub)
+    name, email = _account_name_email(google_sub)
+    abha = _abha_public(_abha_row(google_sub), reveal=True) if abha_shared else None
+    return {
+        "name": h.get("full_name") or name or request.session.get("google_name") or "Patient",
+        "age": h.get("age"), "gender": h.get("gender"),
+        "phone": h.get("phone"), "email": h.get("contact_email") or email,
+        "abha_number": (abha or {}).get("abha_number"), "abha_address": (abha or {}).get("abha_address"),
+        "existing_conditions": h.get("existing_conditions"), "past_history": h.get("past_history"),
+        "allergies": h.get("allergies"), "medications": h.get("medications"),
+        "previous_diagnoses": h.get("previous_diagnoses"),
+        "current_symptoms": h.get("current_symptoms"), "concerns": h.get("concerns"),
+        "notes_for_doctor": h.get("notes_for_doctor"),
+    }
+
+
+def _sniff_file_type(data: bytes):
+    if data.startswith(b"%PDF-"):
+        return "application/pdf", "pdf"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", "jpg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", "png"
+    return None, None
+
+
+def _report_meta(row):
+    d = dict(row)
+    d.pop("data", None)
+    d.pop("google_sub", None)
+    return d
+
+
+def _file_response(row, download: bool):
+    safe_name = re.sub(r'[^A-Za-z0-9._ -]', "_", row["file_name"])[:120] or "report"
+    disposition = "attachment" if download else "inline"
+    return _CareResponse(
+        content=bytes(row["data"]), media_type=row["content_type"],
+        headers={"Content-Disposition": f'{disposition}; filename="{safe_name}"',
+                 "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
+    )
+
+
+# ---------------------------- demo / default doctor ----------------------------
+@app.get("/api/doctors/default")
+def get_default_doctor(request: Request):
+    _require_google_sub(request)
+    _ensure_care_tables()
+    return {"doctor_sub": DEMO_DOCTOR_SUB, "name": DEMO_DOCTOR_NAME, "specialty": DEMO_DOCTOR_SPECIALTY,
+            "org_name": DEMO_DOCTOR_CLINIC, "city": None, "has_hpr": False, "is_demo": True}
+
+
+# ---------------------------- patient health profile ----------------------------
+@app.get("/api/patient/health")
+def get_patient_health(request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_care_tables()
+    name, email = _account_name_email(google_sub)
+    h = _health_row(google_sub)
+    return {"health": h, "account": {"name": name, "email": email},
+            "abha": _abha_public(_abha_row(google_sub)), "categories": list(REPORT_CATEGORIES)}
+
+
+@app.put("/api/patient/health")
+def save_patient_health(payload: dict, request: Request):
+    google_sub = _require_role(request, "patient", "Only patient accounts have a health profile.")
+    _ensure_care_tables()
+    values = {}
+    for col, max_len in HEALTH_TEXT_FIELDS.items():
+        if col in payload:
+            values[col] = (str(payload.get(col) or "").strip()[:max_len]) or None
+    if values.get("date_of_birth"):
+        try:
+            dob = _care_date.fromisoformat(values["date_of_birth"])
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Date of birth must be a valid date.")
+        if dob > _care_date.today():
+            raise HTTPException(status_code=400, detail="Date of birth cannot be in the future.")
+    if values.get("gender") and values["gender"].lower() not in GENDER_OPTIONS:
+        raise HTTPException(status_code=400, detail="Choose a gender from the list.")
+    if values.get("phone") and not re.fullmatch(r"\+?[\d\s()-]{7,20}", values["phone"]):
+        raise HTTPException(status_code=400, detail="Enter a valid phone number.")
+    if values.get("contact_email") and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", values["contact_email"]):
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+    for col, (lo, hi) in HEALTH_NUMBER_FIELDS.items():
+        if col in payload:
+            raw = payload.get(col)
+            if raw in (None, ""):
+                values[col] = None
+                continue
+            try:
+                num = float(raw)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"{col.replace('_', ' ').capitalize()} must be a number.")
+            if not lo <= num <= hi:
+                raise HTTPException(status_code=400, detail=f"{col.replace('_', ' ').capitalize()} must be between {lo} and {hi}.")
+            values[col] = num
+    checklist = payload.get("checklist")
+    if checklist is not None:
+        if not isinstance(checklist, dict):
+            raise HTTPException(status_code=400, detail="Checklist must be an object.")
+        values["checklist"] = _care_json.dumps({str(k)[:60]: bool(v) for k, v in list(checklist.items())[:40]})
+    if not values:
+        raise HTTPException(status_code=400, detail="Nothing to save.")
+    cols = list(values)
+    placeholders = ", ".join(f"CAST(:{c} AS JSONB)" if c == "checklist" else f":{c}" for c in cols)
+    updates = ", ".join(f"{c}=EXCLUDED.{c}" for c in cols)
+    with engine.begin() as conn:
+        conn.execute(_auth_text(f"""
+            INSERT INTO aegiscare_patient_health (google_sub, {", ".join(cols)}, updated_at)
+            VALUES (:sub, {placeholders}, NOW())
+            ON CONFLICT (google_sub) DO UPDATE SET {updates}, updated_at=NOW()
+        """), {"sub": google_sub, **values})
+    return {"health": _health_row(google_sub), "message": "Health information saved."}
+
+
+# ---------------------------- patient medical reports ----------------------------
+@app.get("/api/patient/reports")
+def list_patient_reports(request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_care_tables()
+    with engine.begin() as conn:
+        rows = conn.execute(_auth_text("""
+            SELECT id, title, category, report_date, notes, file_name, content_type, size_bytes, uploaded_at
+            FROM aegiscare_medical_reports WHERE google_sub=:sub
+            ORDER BY COALESCE(report_date, uploaded_at::date) DESC, id DESC
+        """), {"sub": google_sub}).mappings().all()
+    return {"items": [dict(r) for r in rows], "categories": list(REPORT_CATEGORIES),
+            "max_mb": REPORT_MAX_BYTES // (1024 * 1024)}
+
+
+@app.post("/api/patient/reports")
+def upload_patient_report(payload: dict, request: Request):
+    """Body: {title, category, report_date, notes, file_name, data_base64}. PDF, JPG or PNG only."""
+    google_sub = _require_role(request, "patient", "Only patient accounts can upload reports.")
+    _ensure_care_tables()
+    category = str(payload.get("category") or "Other Reports").strip()
+    if category not in REPORT_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Choose a report category from the list.")
+    file_name = str(payload.get("file_name") or "").strip()[:200] or "report"
+    raw_b64 = str(payload.get("data_base64") or "")
+    if "," in raw_b64[:100] and raw_b64.startswith("data:"):
+        raw_b64 = raw_b64.split(",", 1)[1]
+    if len(raw_b64) > REPORT_MAX_BYTES * 4 // 3 + 16:
+        raise HTTPException(status_code=413, detail=f"Reports must be {REPORT_MAX_BYTES // (1024 * 1024)} MB or smaller.")
+    try:
+        data = _care_b64.b64decode(raw_b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="The file could not be read. Please try again.")
+    if not data:
+        raise HTTPException(status_code=400, detail="Choose a file to upload.")
+    if len(data) > REPORT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"Reports must be {REPORT_MAX_BYTES // (1024 * 1024)} MB or smaller.")
+    content_type, _ext = _sniff_file_type(data)  # trust the file's bytes, not its name
+    if not content_type:
+        raise HTTPException(status_code=415, detail="Only PDF, JPG and PNG files can be uploaded.")
+    title = str(payload.get("title") or "").strip()[:200] or re.sub(r"\.[A-Za-z0-9]+$", "", file_name)
+    report_date = str(payload.get("report_date") or "").strip() or None
+    if report_date:
+        try:
+            _care_date.fromisoformat(report_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Report date must be a valid date.")
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("""
+            INSERT INTO aegiscare_medical_reports
+                (google_sub, title, category, report_date, notes, file_name, content_type, size_bytes, data)
+            VALUES (:sub, :title, :category, CAST(:report_date AS DATE), :notes, :file_name, :ctype, :size, :data)
+            RETURNING id, title, category, report_date, notes, file_name, content_type, size_bytes, uploaded_at
+        """), {"sub": google_sub, "title": title, "category": category, "report_date": report_date,
+               "notes": str(payload.get("notes") or "").strip()[:1000] or None,
+               "file_name": file_name, "ctype": content_type, "size": len(data), "data": data}).mappings().one()
+    return {"report": dict(row), "message": "Report uploaded."}
+
+
+@app.patch("/api/patient/reports/{report_id}")
+def update_patient_report(report_id: int, payload: dict, request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_care_tables()
+    sets, params = [], {"id": report_id, "sub": google_sub}
+    if "title" in payload:
+        title = str(payload.get("title") or "").strip()[:200]
+        if not title:
+            raise HTTPException(status_code=400, detail="Report name cannot be empty.")
+        sets.append("title=:title"); params["title"] = title
+    if "category" in payload:
+        if payload.get("category") not in REPORT_CATEGORIES:
+            raise HTTPException(status_code=400, detail="Choose a report category from the list.")
+        sets.append("category=:category"); params["category"] = payload["category"]
+    if "report_date" in payload:
+        rd = str(payload.get("report_date") or "").strip() or None
+        if rd:
+            try:
+                _care_date.fromisoformat(rd)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Report date must be a valid date.")
+        sets.append("report_date=CAST(:report_date AS DATE)"); params["report_date"] = rd
+    if "notes" in payload:
+        sets.append("notes=:notes"); params["notes"] = str(payload.get("notes") or "").strip()[:1000] or None
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nothing to update.")
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text(f"""
+            UPDATE aegiscare_medical_reports SET {", ".join(sets)}
+            WHERE id=:id AND google_sub=:sub
+            RETURNING id, title, category, report_date, notes, file_name, content_type, size_bytes, uploaded_at
+        """), params).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return {"report": dict(row)}
+
+
+@app.delete("/api/patient/reports/{report_id}")
+def delete_patient_report(report_id: int, request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_care_tables()
+    with engine.begin() as conn:
+        deleted = conn.execute(_auth_text("DELETE FROM aegiscare_medical_reports WHERE id=:id AND google_sub=:sub"),
+                               {"id": report_id, "sub": google_sub}).rowcount
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return {"deleted": True}
+
+
+@app.get("/api/patient/reports/{report_id}/file")
+def get_patient_report_file(report_id: int, request: Request, download: bool = False):
+    google_sub = _require_google_sub(request)
+    _ensure_care_tables()
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("""
+            SELECT file_name, content_type, data FROM aegiscare_medical_reports WHERE id=:id AND google_sub=:sub
+        """), {"id": report_id, "sub": google_sub}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return _file_response(row, download)
+
+
+# ---------------------------- patient appointment actions ----------------------------
+@app.post("/api/appointments/{appointment_id}/cancel")
+def cancel_patient_appointment(appointment_id: int, request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_care_tables()
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("""
+            UPDATE aegiscare_patient_appointments SET status='cancelled'
+            WHERE id=:id AND google_sub=:sub AND COALESCE(status,'') NOT IN ('completed','cancelled')
+            RETURNING id, status
+        """), {"id": appointment_id, "sub": google_sub}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Appointment not found, or it is already completed or cancelled.")
+    return dict(row)
+
+
+# ---------------------------- doctor: appointments & patient profile ----------------------------
+_DOCTOR_APPT_COLUMNS = """
+    a.id, a.google_sub, a.patient_name, a.provider_name, a.specialty, a.appointment_date, a.appointment_time,
+    a.reason, a.symptoms, a.status, a.created_at, a.doctor_sub, a.abha_shared, a.patient_snapshot,
+    a.diagnosis, a.consultation_notes, a.prescription, a.investigations, a.follow_up, a.doctor_updated_at
+"""
+
+
+def _doctor_appointment(conn, appointment_id, scope):
+    row = conn.execute(_auth_text(f"""
+        SELECT {_DOCTOR_APPT_COLUMNS} FROM aegiscare_patient_appointments a
+        WHERE a.id=:id AND a.doctor_sub = ANY(:scope)
+    """), {"id": appointment_id, "scope": scope}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+    return row
+
+
+@app.get("/api/doctor/appointments")
+def list_doctor_appointments(request: Request, status: str = ""):
+    _doctor_sub, scope = _doctor_scope(request)
+    _ensure_care_tables()
+    status = status.strip().lower()
+    status_sql = ""
+    params = {"scope": scope}
+    if status in APPOINTMENT_STATUSES:
+        status_sql = "AND (CASE WHEN COALESCE(a.status,'') IN ('','requested') THEN 'pending' ELSE a.status END) = :status"
+        params["status"] = status
+    with engine.begin() as conn:
+        rows = conn.execute(_auth_text(f"""
+            SELECT {_DOCTOR_APPT_COLUMNS},
+                   h.full_name AS h_name, h.date_of_birth AS h_dob, h.age AS h_age, h.gender AS h_gender,
+                   h.phone AS h_phone, u.display_name AS u_name, d.display_name AS doctor_name,
+                   (SELECT COUNT(*) FROM aegiscare_medical_reports m WHERE m.google_sub = a.google_sub) AS report_count
+            FROM aegiscare_patient_appointments a
+            LEFT JOIN aegiscare_patient_health h ON h.google_sub = a.google_sub
+            LEFT JOIN aegiscare_google_users u ON u.google_sub = a.google_sub
+            LEFT JOIN aegiscare_google_users d ON d.google_sub = a.doctor_sub
+            WHERE a.doctor_sub = ANY(:scope) {status_sql}
+            ORDER BY a.appointment_date ASC, a.appointment_time ASC, a.id ASC
+            LIMIT 500
+        """), params).mappings().all()
+    # Patients are identified to the doctor by an alias per patient account, never by the Google id.
+    aliases, items = {}, []
+    for r in rows:
+        alias = aliases.setdefault(r["google_sub"], len(aliases) + 1)
+        snap = r["patient_snapshot"] or {}
+        items.append({
+            "id": r["id"], "patient_key": f"P{alias:03d}",
+            "patient_name": r["h_name"] or snap.get("name") or r["patient_name"] or r["u_name"] or "Patient",
+            "age": _age_from(r["h_dob"], r["h_age"]), "gender": r["h_gender"] or snap.get("gender"),
+            "phone": r["h_phone"] or snap.get("phone"),
+            "appointment_date": r["appointment_date"], "appointment_time": r["appointment_time"],
+            "reason": r["reason"], "symptoms": r["symptoms"], "status": _norm_status(r["status"]),
+            "abha_shared": bool(r["abha_shared"]), "report_count": int(r["report_count"] or 0),
+            "doctor_name": r["doctor_name"], "is_demo_queue": r["doctor_sub"] == DEMO_DOCTOR_SUB,
+            "diagnosis": r["diagnosis"], "created_at": r["created_at"],
+        })
+    counts = {s: sum(1 for i in items if i["status"] == s) for s in APPOINTMENT_STATUSES}
+    return {"items": items, "counts": counts, "demo_doctor": DEMO_DOCTOR_SUB in scope}
+
+
+@app.get("/api/doctor/appointments/{appointment_id}")
+def get_doctor_appointment(appointment_id: int, request: Request):
+    """The appointment plus the full profile of THAT appointment's patient (and nobody else)."""
+    _doctor_sub, scope = _doctor_scope(request)
+    _ensure_care_tables()
+    with engine.begin() as conn:
+        appt = _doctor_appointment(conn, appointment_id, scope)
+        patient_sub = appt["google_sub"]
+        history = conn.execute(_auth_text(f"""
+            SELECT {_DOCTOR_APPT_COLUMNS}, d.display_name AS doctor_name
+            FROM aegiscare_patient_appointments a
+            LEFT JOIN aegiscare_google_users d ON d.google_sub = a.doctor_sub
+            WHERE a.google_sub=:pat AND a.doctor_sub = ANY(:scope)
+            ORDER BY a.appointment_date DESC, a.id DESC
+        """), {"pat": patient_sub, "scope": scope}).mappings().all()
+        reports = conn.execute(_auth_text("""
+            SELECT id, title, category, report_date, notes, file_name, content_type, size_bytes, uploaded_at
+            FROM aegiscare_medical_reports WHERE google_sub=:pat
+            ORDER BY COALESCE(report_date, uploaded_at::date) DESC, id DESC
+        """), {"pat": patient_sub}).mappings().all()
+    health = _health_row(patient_sub)
+    health.pop("checklist", None)
+    account_name, account_email = _account_name_email(patient_sub)
+    abha = None
+    if appt["abha_shared"]:
+        abha = _abha_public(_abha_row(patient_sub), reveal=True)
+        if abha:
+            with engine.begin() as conn:
+                conn.execute(_auth_text("""
+                    INSERT INTO aegiscare_abha_access_log (doctor_sub, patient_sub, appointment_id) VALUES (:doc, :pat, :id)
+                """), {"doc": _doctor_sub, "pat": patient_sub, "id": appointment_id})
+    history_items = [_appointment_public(h) for h in history]
+    prescriptions = [
+        {"appointment_id": h["id"], "date": h["appointment_date"], "doctor_name": h.get("doctor_name"),
+         "diagnosis": h.get("diagnosis"), "items": h.get("prescription") or []}
+        for h in history_items if h.get("prescription")
+    ]
+    report_items = [dict(r) for r in reports]
+    return {
+        "appointment": _appointment_public(appt),
+        "patient": {
+            "name": health.get("full_name") or account_name or appt["patient_name"] or "Patient",
+            "account_email": account_email, **health,
+            "abha": abha, "abha_status": "Shared" if abha else ("Not added" if appt["abha_shared"] else "Not shared by patient"),
+        },
+        "history": history_items,
+        "prescriptions": prescriptions,
+        "reports": report_items,
+        "lab_reports": [r for r in report_items if r["category"] in LAB_REPORT_CATEGORIES],
+        "investigations": [{"appointment_id": h["id"], "date": h["appointment_date"], "text": h["investigations"]}
+                           for h in history_items if h.get("investigations")],
+        "statuses": list(APPOINTMENT_STATUSES),
+    }
+
+
+@app.patch("/api/doctor/appointments/{appointment_id}")
+def update_doctor_appointment(appointment_id: int, payload: dict, request: Request):
+    """Doctor sets status and adds diagnosis, consultation notes, prescription, tests advised and follow-up."""
+    _doctor_sub, scope = _doctor_scope(request)
+    _ensure_care_tables()
+    sets, params = [], {"id": appointment_id, "scope": scope}
+    if "status" in payload:
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in APPOINTMENT_STATUSES:
+            raise HTTPException(status_code=400, detail="Status must be pending, confirmed, completed or cancelled.")
+        sets.append("status=:status"); params["status"] = status
+    for col, max_len in (("diagnosis", 2000), ("consultation_notes", 6000), ("investigations", 3000), ("follow_up", 500)):
+        if col in payload:
+            sets.append(f"{col}=:{col}"); params[col] = str(payload.get(col) or "").strip()[:max_len] or None
+    if "prescription" in payload:
+        sets.append("prescription=CAST(:prescription AS JSONB)")
+        params["prescription"] = _care_json.dumps(_clean_prescription(payload.get("prescription") or []))
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nothing to update.")
+    with engine.begin() as conn:
+        _doctor_appointment(conn, appointment_id, scope)  # 404 unless this doctor may work on it
+        conn.execute(_auth_text(f"""
+            UPDATE aegiscare_patient_appointments SET {", ".join(sets)}, doctor_updated_at=NOW()
+            WHERE id=:id AND doctor_sub = ANY(:scope)
+        """), params)
+        row = _doctor_appointment(conn, appointment_id, scope)
+    return {"appointment": _appointment_public(row), "message": "Appointment updated."}
+
+
+@app.get("/api/doctor/appointments/{appointment_id}/reports/{report_id}/file")
+def get_doctor_report_file(appointment_id: int, report_id: int, request: Request, download: bool = False):
+    """A doctor can open a report only of the patient who booked this appointment with them."""
+    _doctor_sub, scope = _doctor_scope(request)
+    _ensure_care_tables()
+    with engine.begin() as conn:
+        appt = _doctor_appointment(conn, appointment_id, scope)
+        row = conn.execute(_auth_text("""
+            SELECT file_name, content_type, data FROM aegiscare_medical_reports WHERE id=:rid AND google_sub=:pat
+        """), {"rid": report_id, "pat": appt["google_sub"]}).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return _file_response(row, download)
 
 
 
@@ -2123,13 +3262,7 @@ _CITY_ALIASES = [{"bengaluru", "bangalore"}, {"mumbai", "bombay"}, {"chennai", "
                  {"kolkata", "calcutta"}, {"gurugram", "gurgaon"}, {"puducherry", "pondicherry"}]
 
 
-_HOSPITAL_DIR_READY = False
-
-
 def _ensure_hospital_directory():
-    global _HOSPITAL_DIR_READY
-    if _HOSPITAL_DIR_READY:
-        return
     with engine.begin() as conn:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS aegiscare_hospital_directory (
@@ -2147,7 +3280,6 @@ def _ensure_hospital_directory():
                 PRIMARY KEY (name_key, spec, city_key)
             )
         """))
-    _HOSPITAL_DIR_READY = True
 
 
 def _canonical_specialty(value: str) -> str:
@@ -2251,62 +3383,64 @@ Rules:
 # ---------------- hospital search: database ----------------
 
 def _db_hospitals(spec: str, city: str, limit: int):
-    """Hospital search done entirely in SQL: groups and ranks in PostgreSQL and returns only `limit` rows."""
     fragments = PATIENT_SPECIALTIES[spec][0]
     pattern = r"\m(" + "|".join(fragments) + r")\M"
-    params = {"pattern": pattern, "lim": max(1, min(int(limit), 200))}
+    params = {"pattern": pattern}
     city_sql = ""
     if city.strip():
         city_sql = "AND (r.city ILIKE ANY(:likes) OR r.clinic___hospital ILIKE ANY(:likes))"
         params["likes"] = _city_like_patterns(city)
     sql = f"""
-        WITH m AS (
-            SELECT COALESCE(NULLIF(TRIM(r.clinic___hospital),''), NULLIF(TRIM(r.doctor_name),'')) AS name,
-                   NULLIF(TRIM(r.city),'') AS city,
-                   NULLIF(TRIM(r.specialty),'') AS specialty,
-                   CASE WHEN CAST(r.overall_rating AS text) ~ '^[0-9]+([.][0-9]+)?$'
-                        THEN CAST(CAST(r.overall_rating AS text) AS numeric) END AS rating,
-                   r.review_text,
-                   LOWER(COALESCE(t.sentiment,'')) AS sentiment,
-                   (r.specialty ~* :pattern) AS spec_match
-            FROM reviews r
-            LEFT JOIN review_triage t ON t.review_id = r.review_id
-            WHERE (r.specialty ~* :pattern OR r.specialty ILIKE 'Hospital review')
-              {city_sql}
-        )
-        SELECT MIN(name) AS name,
-               MAX(city) AS city,
-               COUNT(*) AS review_count,
-               BOOL_OR(spec_match) AS spec_match,
-               AVG(rating) FILTER (WHERE rating > 0 AND rating <= 5) AS avg_rating,
-               COUNT(rating) FILTER (WHERE rating > 0 AND rating <= 5) AS rating_count,
-               COUNT(*) FILTER (WHERE sentiment = 'positive') AS positive,
-               COUNT(*) FILTER (WHERE sentiment = 'negative') AS negative,
-               (ARRAY_AGG(DISTINCT specialty) FILTER (WHERE specialty IS NOT NULL AND LOWER(specialty) <> 'hospital review'))[1:5] AS specialties,
-               (ARRAY_AGG(LEFT(review_text, 180)) FILTER (WHERE review_text IS NOT NULL AND TRIM(review_text) <> ''))[1:2] AS snippets
-        FROM m
-        WHERE name IS NOT NULL
-        GROUP BY LOWER(name)
-        ORDER BY BOOL_OR(spec_match) DESC,
-                 COALESCE(AVG(rating) FILTER (WHERE rating > 0 AND rating <= 5), 0) DESC,
-                 COUNT(*) DESC
-        LIMIT :lim
+        SELECT COALESCE(NULLIF(TRIM(r.clinic___hospital),''), NULLIF(TRIM(r.doctor_name),'')) AS name,
+               NULLIF(TRIM(r.city),'') AS city,
+               r.specialty, r.overall_rating, r.review_text,
+               LOWER(COALESCE(t.sentiment,'')) AS sentiment,
+               (r.specialty ~* :pattern) AS spec_match
+        FROM reviews r
+        LEFT JOIN review_triage t ON t.review_id = r.review_id
+        WHERE (r.specialty ~* :pattern OR r.specialty ILIKE 'Hospital review')
+          {city_sql}
     """
     with engine.connect() as conn:
         rows = conn.execute(text(sql), params).mappings().all()
-    out = []
+
+    groups = {}
     for r in rows:
-        out.append({
-            "name": r["name"], "location": r["city"] or "",
-            "specialties": list(r["specialties"] or []), "ratings": [],
-            "reviewCount": int(r["review_count"] or 0),
-            "positive": int(r["positive"] or 0), "negative": int(r["negative"] or 0),
-            "snippets": [re.sub(r"\s+", " ", str(x)).strip() for x in (r["snippets"] or [])],
-            "specMatch": bool(r["spec_match"]), "source": "database",
-            "ratingCount": int(r["rating_count"] or 0),
-            "averageRating": float(r["avg_rating"]) if r["avg_rating"] is not None else None,
-        })
-    return out
+        name = (r["name"] or "").strip()
+        if not name:
+            continue
+        g = groups.setdefault(name.lower(), {
+            "name": name, "location": r["city"] or "", "specialties": [], "ratings": [],
+            "reviewCount": 0, "positive": 0, "negative": 0, "snippets": [],
+            "specMatch": False, "source": "database"})
+        g["reviewCount"] += 1
+        g["specMatch"] = g["specMatch"] or bool(r["spec_match"])
+        if r["city"] and not g["location"]:
+            g["location"] = r["city"]
+        sp = (r["specialty"] or "").strip()
+        if sp and sp.lower() != "hospital review" and sp not in g["specialties"]:
+            g["specialties"].append(sp)
+        try:
+            val = float(r["overall_rating"])
+            if 0 < val <= 5:
+                g["ratings"].append(val)
+        except (TypeError, ValueError):
+            pass
+        if r["sentiment"] == "positive":
+            g["positive"] += 1
+        elif r["sentiment"] == "negative":
+            g["negative"] += 1
+        txt = re.sub(r"\s+", " ", str(r["review_text"] or "")).strip()
+        if txt and len(g["snippets"]) < 2:
+            g["snippets"].append(txt[:180])
+
+    out = []
+    for g in groups.values():
+        g["ratingCount"] = len(g["ratings"])
+        g["averageRating"] = (sum(g["ratings"]) / len(g["ratings"])) if g["ratings"] else None
+        out.append(g)
+    out.sort(key=lambda g: (not g["specMatch"], -(g["averageRating"] or 0), -g["reviewCount"]))
+    return out[:limit]
 
 
 # ---------------- hospital search: scrape cache ----------------
@@ -2815,10 +3949,3 @@ def patient_hospital_availability(payload: HospitalAvailabilityRequest, request:
     out.update({"doctors": doctors, "doctors_specialty_filtered": specialty_filtered,
                 "doctors_found_total": len(doctors_all), "cached": cached})
     return out
-
-
-# Assign pre-existing analysed reviews to the original account if it has already signed in.
-try:
-    _claim_legacy_reviews()
-except Exception as _claim_err:
-    print(f"Legacy review claim will run after the database is ready: {_claim_err}")
