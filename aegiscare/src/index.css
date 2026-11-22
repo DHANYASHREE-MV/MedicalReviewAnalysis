@@ -1562,7 +1562,7 @@ body { background: var(--bg); }
   .hero-features > div { white-space: normal; }
   .hero-orb-right { width: 62vw; right: -14%; top: 4%; }
   .hero-orb-left { display: none; }
-  .hero-dots { width: 70vw; height: 70vw; right: -6%; }
+  .hero-dots { display: none; } /* droplets would sit on the headline text on small screens */
 }
 @media (max-width: 420px) {
   .hero-features { justify-content: flex-start; width: 100%; }

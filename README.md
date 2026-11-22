@@ -1,4 +1,8 @@
+<p align="center"><img src="aegiscare/public/brand/aegiscare-logo.svg" width="96" alt="AegisCare logo: a wine shield with an A whose crossbar is a heartbeat"></p>
+
 # AegisCare — AI-Powered Healthcare Review Intelligence
+
+**Live site:** https://dhanyashree-mv.github.io/MedicalReviewAnalysis/ (frontend on GitHub Pages)
 
 > **Turning patient feedback into better care.**
 
@@ -24,6 +28,7 @@ The platform combines healthcare review data with a multi-agent AI workflow to c
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
+- [Deploying the Frontend to GitHub Pages](#deploying-the-frontend-to-github-pages)
 - [API Overview](#api-overview)
 - [Future Enhancements](#future-enhancements)
 - [Disclaimer](#disclaimer)
@@ -487,6 +492,31 @@ http://localhost:5173
 ```
 
 ---
+
+## Deploying the Frontend to GitHub Pages
+
+The workflow `.github/workflows/deploy-pages.yml` builds `aegiscare/` and publishes it every time `main` changes.
+
+1. **One-time setup:** in the repository go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
+2. Push to `main` (or run the workflow from the **Actions** tab). The site appears at `https://dhanyashree-mv.github.io/MedicalReviewAnalysis/`.
+
+GitHub Pages hosts only the static frontend. The landing, About and Contact pages work on their own; sign-in, dashboards and the AI workflow need the FastAPI backend running somewhere reachable over HTTPS:
+
+- Add a repository variable **`VITE_API_BASE_URL`** (Settings → Secrets and variables → Actions → Variables), for example `https://your-api.example.com/api`, and re-run the workflow.
+- In the backend `.env`, allow the Pages site and cross-site cookies:
+
+```env
+CORS_ORIGINS=http://localhost:5173,https://dhanyashree-mv.github.io
+AUTH_FRONTEND_URL=https://dhanyashree-mv.github.io/MedicalReviewAnalysis
+AUTH_COOKIE_SAMESITE=none
+AUTH_HTTPS_ONLY=true
+```
+
+Also add the backend's `/api/auth/google/callback` URL to the authorised redirect URIs of your Google OAuth client. Local development is unchanged: without these settings everything runs on `localhost` as before.
+
+### Brand
+
+The logo is a shield (*aegis*) holding an "A" whose crossbar is a heartbeat. Files are in `aegiscare/public/brand/` (light and dark versions) and `aegiscare/public/favicon.svg`. The interface uses an editorial paper, ink and wine palette with light and dark modes (switch in the header).
 
 ## API Overview
 

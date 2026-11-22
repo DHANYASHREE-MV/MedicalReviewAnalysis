@@ -8,7 +8,8 @@ import { createPortal } from "react-dom";
    ===================================================================== */
 const API = {
   // IMPORTANT: use "localhost" (same host as the frontend) so the session cookie is sent.
-  baseUrl: "http://localhost:8000/api",
+  // Set VITE_API_BASE_URL when building for a hosted site (e.g. GitHub Pages); local dev keeps localhost.
+  baseUrl: (import.meta.env && import.meta.env.VITE_API_BASE_URL) || "http://localhost:8000/api",
   endpoints: {
     dashboard: "/dashboard",
     reviews: "/reviews",
@@ -552,7 +553,30 @@ const ICONS = {
   file: <g><path d="M14 3H6.5A1.5 1.5 0 005 4.5v15A1.5 1.5 0 006.5 21h11a1.5 1.5 0 001.5-1.5V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></g>,
 };
 const Icon = ({ n, size = 18 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICONS[n]}</svg>;
-const Mark = () => <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 2.5l8 3v6.2c0 4.8-3.3 8.2-8 9.8-4.7-1.6-8-5-8-9.8V5.5z" /><path d="M12 8v6M9 11h6" /></svg>;
+// AegisCare logo: a shield ("aegis") holding an "A" whose crossbar is a heartbeat,
+// for care and for reading the pulse of patient feedback. Colours follow the theme.
+const Mark = ({ size = 30, title }) => <svg className="logo-mark" width={size} height={size} viewBox="0 0 64 64" role={title ? "img" : undefined} aria-label={title} aria-hidden={title ? undefined : "true"}>
+  <path className="logo-shield" d="M32 3.5 55 11.5v18.8c0 15.2-9.6 26.1-23 30.7C18.6 56.4 9 45.5 9 30.3V11.5z" />
+  <path className="logo-inner" d="M32 8.4 50.6 14.9v15.4c0 12.4-7.6 21.5-18.6 25.7-11-4.2-18.6-13.3-18.6-25.7V14.9z" fill="none" strokeWidth="1.1" />
+  <path className="logo-glyph" d="M20.6 46.5 32 15.5l11.4 31" fill="none" strokeWidth="5.6" strokeLinejoin="miter" strokeMiterlimit="10" />
+  <path className="logo-glyph logo-pulse" d="M24.6 35.8h3.4l1.9-3.9 2.9 7.6 2.4-5.6 1.4 1.9h3.1" fill="none" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+</svg>;
+
+// Light / dark switch shown in every header. It stores the choice in the existing settings.
+function ThemeToggle({ theme, onChange }) {
+  const current = theme === "system"
+    ? (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme")) || "light"
+    : theme;
+  const next = current === "dark" ? "light" : "dark";
+  return <button type="button" className="theme-toggle" onClick={() => onChange(next)} aria-label={`Switch to ${next} mode`} title={`Switch to ${next} mode`}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {current === "dark"
+        ? <g><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" /></g>
+        : <path d="M20.2 14.6A8.4 8.4 0 019.4 3.8 8.4 8.4 0 1020.2 14.6z" />}
+    </svg>
+    <span className="theme-toggle-label">{current === "dark" ? "Light" : "Dark"}</span>
+  </button>;
+}
 
 const GL = {
   heart: <path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z" />,
@@ -1221,7 +1245,7 @@ function GoogleLogin({ apiBaseUrl = API.baseUrl, go, signedIn, email }) {
   };
   return <section className="auth-shell">
     <div className="auth-art">
-      <div className="auth-brand"><Mark /><span>AegisCare AI</span></div>
+      <div className="auth-brand"><Mark size={36} /><span>AegisCare AI</span></div>
       <h2>Better care starts with listening to patients.</h2>
       <HeroArt variant="patient" />
       <ul className="auth-points">
@@ -6241,6 +6265,44 @@ tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, transparent) !i
 .lp-ico { border-radius: 50% !important; background: transparent !important; border: 1px solid var(--brand); }
 .lp section h2, .lp h2 { font-family: var(--display) !important; font-weight: 400 !important; text-transform: uppercase; letter-spacing: .01em; line-height: 1; }
 
+/* ---------------- Logo ---------------- */
+:root, :root[data-theme="light"] { --logo-shield: #6e2232; --logo-glyph: #f7f1e8; --logo-edge: transparent; }
+:root[data-theme="dark"] { --logo-shield: #8c2a3f; --logo-glyph: #f7f1e8; --logo-edge: rgba(208,106,126,.55); }
+.logo-mark { flex: none; display: block; overflow: visible; }
+.logo-shield { fill: var(--logo-shield); stroke: var(--logo-edge); stroke-width: 1; }
+.logo-inner { stroke: var(--logo-glyph); stroke-opacity: .3; }
+.logo-glyph { stroke: var(--logo-glyph); }
+.topbar .brand .logo-mark, .landing-nav .brand .logo-mark { width: 34px !important; height: 34px !important; }
+.brand:hover .logo-pulse { animation: logoBeat 1.1s ease-in-out; }
+@keyframes logoBeat { 0%,100% { stroke-dasharray: 40; stroke-dashoffset: 0; } 50% { stroke-dasharray: 40; stroke-dashoffset: 40; } }
+.auth-brand { display: inline-flex; align-items: center; gap: 12px; font-family: var(--display); text-transform: uppercase; letter-spacing: .03em; font-size: 22px; }
+
+/* ---------------- Light / dark switch ---------------- */
+.theme-toggle {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; cursor: pointer;
+  border: 1px solid var(--text); border-radius: 0; background: transparent; color: var(--text);
+  font: 700 11px/1 var(--sans); letter-spacing: .16em; text-transform: uppercase; transition: background .2s, color .2s;
+}
+.theme-toggle:hover { background: var(--text); color: var(--bg); }
+.theme-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.theme-toggle svg { transition: transform .5s cubic-bezier(.3,1.4,.5,1); }
+.theme-toggle:hover svg { transform: rotate(-25deg); }
+.tb-actions { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.topbar.app-nav .theme-toggle { margin-left: auto; }
+.topbar.app-nav .theme-toggle + div { margin-left: 0 !important; }
+@media (max-width: 720px) { .theme-toggle-label { display: none; } .theme-toggle { padding: 0 10px; } }
+:root[data-theme] body, .app { transition: background-color .35s ease, color .35s ease; }
+
+/* Phones: logo, switch and profile share one compact row */
+@media (max-width: 560px) {
+  .topbar, .topbar.app-nav, .topbar.landing-nav { gap: 8px !important; padding-left: 14px !important; padding-right: 14px !important; }
+  .topbar .brand .logo-mark, .landing-nav .brand .logo-mark { width: 28px !important; height: 28px !important; }
+  .topbar .brand { font-size: 19px !important; gap: 6px !important; }
+  .topbar .brand-ai { display: none !important; }
+  .theme-toggle { height: 36px; padding: 0 8px; }
+  .profile-button > span:not([aria-hidden]) { max-width: 70px !important; }
+  .nav-get-started { padding: 11px 10px !important; letter-spacing: .08em !important; font-size: 10.5px !important; }
+}
 /* Segmented controls (e.g. theme picker) wrap instead of overflowing */
 .seg { flex-wrap: wrap; max-width: 100%; }
 .seg button { flex: 1 1 auto; }
@@ -6636,16 +6698,19 @@ function App() {
       {fx && <><div className="pfx-aurora" aria-hidden="true"><i /><i /><i /></div><div className="pfx-scroll" aria-hidden="true" /></>}
       <header className={"topbar" + (landingLike ? " landing-nav" : " app-nav") + (showSide ? " has-side" : "")}>
         <button className="brand" onClick={() => setPage("home")} aria-label="AegisCare home">
-          <Mark /><span>AegisCare</span>{page !== "home" && <span className="brand-ai">AI</span>}
+          <Mark size={34} /><span>AegisCare</span><span className="brand-ai">AI</span>
         </button>
         {landingLike ? <>
           {(page === "home" || page === "about" || page === "contact") && <nav className="marketing-nav" aria-label="Public navigation">
             <button onClick={() => setPage("about")}>About</button>
             <button onClick={() => setPage("contact")}>Contact</button>
           </nav>}
-          {page === "home" && <button className="nav-get-started" onClick={handleExplore}>Explore the platform <span>↗</span></button>}
-          {(page === "about" || page === "contact") && <button className="nav-get-started" onClick={() => setPage("home")}>Back to home <span>↗</span></button>}
-          {page === "onboarding" && <button className="nav-get-started" onClick={logout}>Sign out <span>↗</span></button>}
+          <div className="tb-actions">
+            <ThemeToggle theme={settings.theme} onChange={t => setSettings(s => ({ ...s, theme: t }))} />
+            {page === "home" && <button className="nav-get-started" onClick={handleExplore}>Explore the platform <span>↗</span></button>}
+            {(page === "about" || page === "contact") && <button className="nav-get-started" onClick={() => setPage("home")}>Back to home <span>↗</span></button>}
+            {page === "onboarding" && <button className="nav-get-started" onClick={logout}>Sign out <span>↗</span></button>}
+          </div>
         </> : <>
           {googleAuth.role === "patient" && <nav className="top-nav" aria-label="Main navigation">
             {(googleAuth.role === "patient"
@@ -6662,6 +6727,7 @@ function App() {
               </button>
             )}
           </nav>}
+          <ThemeToggle theme={settings.theme} onChange={t => setSettings(s => ({ ...s, theme: t }))} />
           <div ref={profileRef} style={{ position: "relative" }}>
             <button
               className="btn profile-button"
