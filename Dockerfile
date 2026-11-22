@@ -1,6 +1,7 @@
 # AegisCare backend (FastAPI + LangGraph agents + Playwright scrapers) for cloud hosting.
 # The frontend is published separately on GitHub Pages.
-FROM python:3.12-slim
+# Debian 12 (bookworm): fully supported by Playwright's --with-deps installer.
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -10,7 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # xvfb gives the Google Maps review scraper (which opens a visible browser) a virtual screen.
-RUN apt-get update && apt-get install -y --no-install-recommends xvfb xauth \
+# libatomic1 is needed by Playwright's bundled Node.js (missing from the slim image).
+RUN apt-get update && apt-get install -y --no-install-recommends xvfb xauth libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
