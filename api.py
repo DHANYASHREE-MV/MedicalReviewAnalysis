@@ -33,7 +33,13 @@ if not DB_URI:
 
     raise ValueError("DB_URI not found in .env")
 
-engine = create_engine(DB_URI)
+# Hosted databases (Render, Neon, Supabase…) give URLs like "postgres://…" or "postgresql://…".
+# SQLAlchemy would then look for psycopg2, which is not installed; use psycopg (v3) instead.
+# URLs that already name a driver (e.g. "postgresql+psycopg://", used locally) are unchanged.
+if re.match(r"^postgres(ql)?://", DB_URI):
+    DB_URI = re.sub(r"^postgres(ql)?://", "postgresql+psycopg://", DB_URI, count=1)
+
+engine = create_engine(DB_URI, pool_pre_ping=True)
 
 # Apify is an optional alternative to the Playwright Google Maps scraper for
 # retrieving reviews (set APIFY_API_KEY in the backend .env to enable it).
@@ -1831,9 +1837,53 @@ _GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
 if not _AUTH_SESSION_SECRET:
     print("WARNING: AUTH_SESSION_SECRET is missing from .env; Google sign-in will not be secure until it is configured.")
 
+_SESSION_SECRET_VALUE = _AUTH_SESSION_SECRET or _auth_secrets.token_urlsafe(48)
+
+# ---- Sign-in token for a frontend on another site (e.g. GitHub Pages) ----
+# The session cookie keeps working exactly as before. In addition, the Google callback
+# hands the browser a signed token (in the URL fragment, which is never sent to servers);
+# the frontend sends it back as "Authorization: Bearer …". If a request has no session
+# cookie (browsers block cookies between two different sites), the token fills the same
+# session fields, so every endpoint keeps using request.session unchanged.
+from itsdangerous import URLSafeTimedSerializer as _AuthTokenSerializer, BadSignature as _AuthBadSignature
+_AUTH_TOKEN_MAX_AGE = int(os.getenv("AUTH_TOKEN_MAX_AGE_DAYS", "14")) * 86400
+_auth_token_serializer = _AuthTokenSerializer(_SESSION_SECRET_VALUE, salt="aegiscare-auth-token")
+_AUTH_TOKEN_FIELDS = ("google_sub", "google_email", "google_name", "google_picture")
+
+
+def _make_auth_token(session_data):
+    return _auth_token_serializer.dumps({k: session_data.get(k, "") for k in _AUTH_TOKEN_FIELDS})
+
+
+def _read_auth_token(token):
+    try:
+        data = _auth_token_serializer.loads(token, max_age=_AUTH_TOKEN_MAX_AGE)
+    except _AuthBadSignature:  # also covers expired tokens
+        return None
+    return data if isinstance(data, dict) and data.get("google_sub") else None
+
+
+class _BearerSessionMiddleware:
+    """Runs inside SessionMiddleware: fills an empty session from a valid bearer token."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and isinstance(scope.get("session"), dict) and not scope["session"].get("google_sub"):
+            header = dict(scope.get("headers") or []).get(b"authorization", b"").decode("latin-1")
+            if header[:7].lower() == "bearer ":
+                data = _read_auth_token(header[7:].strip())
+                if data:
+                    scope["session"].update({k: data.get(k, "") for k in _AUTH_TOKEN_FIELDS})
+        await self.app(scope, receive, send)
+
+
+# Added before SessionMiddleware so it sits inside it (the session already exists when it runs).
+app.add_middleware(_BearerSessionMiddleware)
+
 app.add_middleware(
     SessionMiddleware,
-    secret_key=_AUTH_SESSION_SECRET or _auth_secrets.token_urlsafe(48),
+    secret_key=_SESSION_SECRET_VALUE,
     # Defaults suit localhost. For a frontend on another site (GitHub Pages) behind HTTPS set
     # AUTH_COOKIE_SAMESITE=none and AUTH_HTTPS_ONLY=true in .env so the browser sends the cookie.
     same_site=os.getenv("AUTH_COOKIE_SAMESITE", "lax").strip().lower(),
@@ -1942,7 +1992,9 @@ async def google_oauth_callback(request: Request):
     request.session["google_email"] = email
     request.session["google_name"] = userinfo.get("name") or ""
     request.session["google_picture"] = userinfo.get("picture") or ""
-    return RedirectResponse(url=f"{_AUTH_FRONTEND_URL}/?google_auth=success", status_code=303)
+    # Same redirect as before; the fragment carries the sign-in token for cross-site frontends.
+    token = _make_auth_token(request.session)
+    return RedirectResponse(url=f"{_AUTH_FRONTEND_URL}/?google_auth=success#aegis_token={token}", status_code=303)
 
 
 @app.get("/api/auth/me")

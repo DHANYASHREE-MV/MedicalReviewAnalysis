@@ -500,19 +500,42 @@ The workflow `.github/workflows/deploy-pages.yml` builds `aegiscare/` and publis
 1. **One-time setup:** in the repository go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
 2. Push to `main` (or run the workflow from the **Actions** tab). The site appears at `https://dhanyashree-mv.github.io/MedicalReviewAnalysis/`.
 
-GitHub Pages hosts only the static frontend. The landing, About and Contact pages work on their own; sign-in, dashboards and the AI workflow need the FastAPI backend running somewhere reachable over HTTPS:
+GitHub Pages hosts only the static frontend. Sign-in, dashboards, the database and the AI agents need the FastAPI backend running at a public **https** address. Choose one of the two options below, then point the website at it (step 3).
 
-- Add a repository variable **`VITE_API_BASE_URL`** (Settings → Secrets and variables → Actions → Variables), for example `https://your-api.example.com/api`, and re-run the workflow.
-- In the backend `.env`, allow the Pages site and cross-site cookies:
+#### Option A: run the backend on your own computer and share it with ngrok (quickest, uses your local data)
 
-```env
-CORS_ORIGINS=http://localhost:5173,https://dhanyashree-mv.github.io
-AUTH_FRONTEND_URL=https://dhanyashree-mv.github.io/MedicalReviewAnalysis
-AUTH_COOKIE_SAMESITE=none
-AUTH_HTTPS_ONLY=true
-```
+Everything keeps running exactly as it does locally (your PostgreSQL data, the visible Maps browser, your `.env`). The online site works while your computer and the tunnel are running.
 
-Also add the backend's `/api/auth/google/callback` URL to the authorised redirect URIs of your Google OAuth client. Local development is unchanged: without these settings everything runs on `localhost` as before.
+1. Create a free account at [ngrok.com](https://ngrok.com), install ngrok and claim your **free static domain** (Dashboard → Domains), e.g. `your-name.ngrok-free.app`.
+2. Start the backend as usual, then the tunnel:
+   ```bash
+   uvicorn api:app --port 8000
+   ngrok http --url=your-name.ngrok-free.app 8000
+   ```
+3. Add to the backend `.env` and restart the backend:
+   ```env
+   GOOGLE_REDIRECT_URI=https://your-name.ngrok-free.app/api/auth/google/callback
+   AUTH_FRONTEND_URL=https://dhanyashree-mv.github.io/MedicalReviewAnalysis
+   CORS_ORIGINS=https://dhanyashree-mv.github.io,http://localhost:5173
+   AUTH_COOKIE_SAMESITE=none
+   AUTH_HTTPS_ONLY=true
+   ```
+   To go back to purely local use, remove these lines again.
+
+#### Option B: host the backend on Render (always on)
+
+1. Render → **New → Blueprint** → choose this repository. `render.yaml` creates the `aegiscare-api` service (built from the `Dockerfile`, with Chromium and a virtual screen for the scrapers) and a PostgreSQL database.
+2. In the service's **Environment** tab fill the empty values: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GROQ_API_KEY`, optional `APIFY_API_KEY` / `BREVO_API_KEY` / `SMTP_FROM`, and `GOOGLE_REDIRECT_URI=https://<service>.onrender.com/api/auth/google/callback`.
+3. Load your data into the new database, e.g. `pg_dump` your local database and `psql "<Render external URL>" < dump.sql` (or run `bulk_import_database.py` with `DB_URI` set to the Render URL).
+4. Notes: the free plan sleeps after 15 minutes without traffic (the first request then takes ~1 minute) and has 512 MB memory, which can be tight for the Playwright scrapers; free Render databases expire after 30 days.
+
+#### 3. Point the website at the backend (both options)
+
+1. GitHub → repository **Settings → Secrets and variables → Actions → Variables → New repository variable**: `VITE_API_BASE_URL` = `https://<your-backend-host>/api`.
+2. **Actions → Deploy to GitHub Pages → Run workflow** to rebuild the site with that address.
+3. **Google Cloud Console → APIs & Services → Credentials →** your OAuth client: add `https://<your-backend-host>/api/auth/google/callback` to **Authorised redirect URIs**.
+
+**How sign-in works across two sites:** the website (`github.io`) and the backend are different sites, and browsers often block the session cookie between them. After Google sign-in the backend therefore also returns a signed token (in the URL fragment), which the website keeps and sends as `Authorization: Bearer …`. The token lasts 14 days (`AUTH_TOKEN_MAX_AGE_DAYS`) and is removed on logout. Locally the cookie keeps working as before.
 
 ### Brand
 

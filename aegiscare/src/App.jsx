@@ -504,6 +504,44 @@ function getTotal(payload, fallback = 0) {
 
 const apiFetch = (url, opts = {}) => fetch(url, { credentials: "include", ...opts });
 
+/* ---- Sign-in token for the online site (GitHub Pages + hosted backend) ----
+   After Google sign-in the backend returns "#aegis_token=…". The token is kept in this
+   browser and sent as "Authorization: Bearer …" with every request to the AegisCare
+   backend, because browsers often block the session cookie between two different sites.
+   Locally the cookie still works as before; the token only adds a second way in. */
+const AUTH_TOKEN_KEY = "aegiscare_auth_token";
+const clearAuthToken = () => { try { localStorage.removeItem(AUTH_TOKEN_KEY); } catch (_) { } };
+(function setupAuthToken() {
+  if (typeof window === "undefined" || window.__aegisFetchPatched) return;
+  window.__aegisFetchPatched = true;
+  try {
+    const m = window.location.hash.match(/(?:^#|&)aegis_token=([^&]+)/);
+    if (m) {
+      localStorage.setItem(AUTH_TOKEN_KEY, decodeURIComponent(m[1]));
+      // Remove the token from the address bar; keep "?google_auth=success" for the existing sign-in handling.
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    }
+  } catch (_) { }
+  let apiOrigin = "";
+  try { apiOrigin = new URL(API.baseUrl).origin; } catch (_) { }
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    try {
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      if (apiOrigin && url.startsWith(apiOrigin) && init.mode !== "no-cors") {
+        const headers = new Headers(init.headers || (typeof input !== "string" && input && input.headers) || undefined);
+        let token = null;
+        try { token = localStorage.getItem(AUTH_TOKEN_KEY); } catch (_) { }
+        if (token && !headers.has("Authorization")) headers.set("Authorization", "Bearer " + token);
+        // Free ngrok tunnels show a warning page unless this header is sent.
+        if (/\.ngrok(-free)?\.(app|dev|io)$/.test(new URL(url).hostname)) headers.set("ngrok-skip-browser-warning", "1");
+        init = { ...init, headers };
+      }
+    } catch (_) { }
+    return nativeFetch(input, init);
+  };
+})();
+
 async function fetchJson(url) {
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
@@ -6695,6 +6733,7 @@ function App() {
     try { await fetch(base + "/auth/logout", { method: "POST", credentials: "include" }); } catch (e) { console.warn("Logout request failed:", e); }
     setGoogleAuth(EMPTY_AUTH);
     try { localStorage.removeItem(SEARCH_HIST_KEY); } catch (e) { }
+    clearAuthToken();
     setProfileOpen(false);
     setPage("home");
     setToastMsg("Logged out");

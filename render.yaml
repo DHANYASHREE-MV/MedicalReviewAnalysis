@@ -1,0 +1,43 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> pick this repository.
+# Creates the AegisCare backend (Docker) and a PostgreSQL database.
+# Fill the "sync: false" values in the Render dashboard (they are secrets and never stored here).
+services:
+  - type: web
+    name: aegiscare-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/auth/me
+    envVars:
+      - key: DB_URI
+        fromDatabase:
+          name: aegiscare-db
+          property: connectionString
+      - key: AUTH_SESSION_SECRET
+        generateValue: true
+      - key: AUTH_FRONTEND_URL
+        value: https://dhanyashree-mv.github.io/MedicalReviewAnalysis
+      - key: CORS_ORIGINS
+        value: https://dhanyashree-mv.github.io,http://localhost:5173
+      - key: AUTH_COOKIE_SAMESITE
+        value: none
+      - key: AUTH_HTTPS_ONLY
+        value: "true"
+      - key: GOOGLE_REDIRECT_URI
+        sync: false   # https://<your-service>.onrender.com/api/auth/google/callback
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: APIFY_API_KEY
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+
+databases:
+  - name: aegiscare-db
+    plan: free
+    databaseName: aegiscare
