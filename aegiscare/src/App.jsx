@@ -34,32 +34,41 @@ function applyTheme(theme) {
 
 const THEME_CSS = `
 :root[data-theme="light"] {
-  --bg: #f6eddf !important;          /* cream #EEDFC7, lightened for the page */
-  --surface: #fffaf2 !important;
-  --surface-2: #eedfc7 !important;   /* cream */
-  --line: #dcc6a3 !important;
-  --text: #3b2410 !important;        /* brown #533416, deepened for reading */
-  --muted: #6e5235 !important;
-  --brand: #ce7f20 !important;       /* amber */
-  --on-brand: #2b1a08 !important;    /* dark text on amber buttons (white fails contrast) */
-  --ok: #607938 !important;          /* olive */
-  --good: #607938 !important;
-  --warn: #a8640f !important;
-  --crit: #b4442e !important;
+  /* Editorial palette: paper, ink and wine */
+  --bg: #e8e4d8 !important;          /* paper */
+  --surface: #f2efe6 !important;     /* card */
+  --surface-2: #e0dbcd !important;   /* pressed paper */
+  --line: #cfc8b8 !important;        /* rule */
+  --text: #141110 !important;        /* ink */
+  --ink: #141110 !important;
+  --muted: #5a534a !important;
+  --brand: #6e2232 !important;       /* wine */
+  --brand-strong: #6e2232 !important;
+  --on-brand: #f7f1e8 !important;
+  --frame: #35111b !important;       /* deep wine frame */
+  --rust: #76352e !important;
+  --ok: #4e6b32 !important;
+  --good: #4e6b32 !important;
+  --warn: #8a5a12 !important;
+  --crit: #9e2b25 !important;
 }
 :root[data-theme="dark"] {
-  --bg: #1d1309 !important;          /* brown #533416, darkened */
-  --surface: #2a1c0e !important;
-  --surface-2: #362412 !important;
-  --line: #533416 !important;        /* brown */
-  --text: #eedfc7 !important;        /* cream */
-  --muted: #c4ad8a !important;
-  --brand: #ce7f20 !important;       /* amber */
-  --on-brand: #2b1a08 !important;
-  --ok: #8fa866 !important;          /* olive, lightened for dark backgrounds */
-  --good: #8fa866 !important;
-  --warn: #e0a43a !important;
-  --crit: #e07b5f !important;
+  --bg: #120b0d !important;          /* wine-black */
+  --surface: #1c1214 !important;
+  --surface-2: #27181c !important;
+  --line: #3d252b !important;
+  --text: #ede6d8 !important;        /* paper as text */
+  --ink: #ede6d8 !important;
+  --muted: #b9a99c !important;
+  --brand: #d06a7e !important;       /* wine, lifted for dark backgrounds */
+  --brand-strong: #8c2a3f !important;
+  --on-brand: #f7f1e8 !important;
+  --frame: #4a1726 !important;
+  --rust: #c0705f !important;
+  --ok: #9bb57a !important;
+  --good: #9bb57a !important;
+  --warn: #e0a95a !important;
+  --crit: #ef8a7d !important;
 }
 :root[data-theme="light"] body,
 :root[data-theme="light"] .app { background: var(--bg) !important; color: var(--text) !important; }
@@ -110,29 +119,7 @@ body, .app, .main { color: var(--text) !important; }
 .top-nav .nav svg { color: inherit !important; }
 .profile-button { background: var(--surface) !important; color: var(--text) !important; border-color: var(--line) !important; }
 .profile-button span { color: var(--text) !important; }
-.nav-get-started, .hero-explore {
-  background: var(--brand) !important; color: var(--on-brand, #2b1a08) !important;
-  border-color: var(--brand) !important; box-shadow: 0 10px 28px color-mix(in srgb, var(--brand) 30%, transparent) !important;
-}
-.nav-get-started span, .hero-explore span { color: inherit !important; }
-.landing-hero {
-  background:
-    radial-gradient(60% 70% at 15% 20%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 70%),
-    radial-gradient(55% 65% at 85% 75%, color-mix(in srgb, #607938 22%, transparent), transparent 70%),
-    var(--bg) !important;
-  color: var(--text) !important;
-}
-.landing-hero h1, .hero-copy h1 { color: var(--text) !important; background: none !important; -webkit-text-fill-color: currentColor !important; }
-.landing-hero h1 span, .hero-copy h1 span { color: var(--brand) !important; -webkit-text-fill-color: currentColor !important; }
-.landing-hero p, .hero-copy p { color: var(--text) !important; opacity: .88; }
-.hero-eyebrow { color: var(--brand) !important; background: color-mix(in srgb, var(--brand) 12%, transparent) !important; border-color: color-mix(in srgb, var(--brand) 35%, transparent) !important; }
-.hero-orb-left { background: radial-gradient(circle, color-mix(in srgb, var(--brand) 45%, transparent), transparent 70%) !important; }
-.hero-orb-right { background: radial-gradient(circle, color-mix(in srgb, #607938 45%, transparent), transparent 70%) !important; }
-.hero-dots { opacity: .25 !important; filter: sepia(1) saturate(2) hue-rotate(-10deg) !important; }
-.hero-features { background: var(--surface) !important; border-color: var(--line) !important; color: var(--text) !important; }
-.hero-features span { color: var(--text) !important; }
-.hero-features .feature-icon { color: var(--brand) !important; }
-.hero-features i { background: var(--line) !important; }
+/* Landing page and its buttons are styled in index.css (editorial theme). */
 .landing-main, .app.pfx, .app { background-color: var(--bg) !important; }
 .app-status { background: var(--surface) !important; color: var(--muted) !important; border-color: var(--line) !important; }
 .chip { color: var(--text) !important; border-color: var(--line) !important; }
@@ -235,7 +222,7 @@ body, .app, .main { color: var(--text) !important; }
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --bg: #f6eddf; --surface: #fffaf2; --surface-2: #eedfc7; --line: #dcc6a3; --text: #3b2410; --muted: #6e5235;
+    --bg: #e8e4d8; --surface: #f2efe6; --surface-2: #e0dbcd; --line: #cfc8b8; --text: #141110; --muted: #5a534a;
   }
 }
 `;
@@ -562,6 +549,7 @@ const ICONS = {
   user: <g><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></g>,
   pulse: <path d="M3 12h4l3-8 4 16 3-8h4" />,
   glow: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" />,
+  file: <g><path d="M14 3H6.5A1.5 1.5 0 005 4.5v15A1.5 1.5 0 006.5 21h11a1.5 1.5 0 001.5-1.5V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></g>,
 };
 const Icon = ({ n, size = 18 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICONS[n]}</svg>;
 const Mark = () => <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 2.5l8 3v6.2c0 4.8-3.3 8.2-8 9.8-4.7-1.6-8-5-8-9.8V5.5z" /><path d="M12 8v6M9 11h6" /></svg>;
@@ -3154,7 +3142,7 @@ function DoctorAppointments({ apiBaseUrl, onHprChange }) {
 
 
 /* ---- small dependency-free pie chart (SVG) ---- */
-const PIE_COLORS = ["#ce7f20", "#8fa866", "#eedfc7", "#a0673a", "#607938", "#e0b36a"];
+const PIE_COLORS = ["#6e2232", "#a85a4a", "#141110", "#c9a27a", "#76352e", "#8c7b68"];
 function PieChart({ data = [], size = 190, emptyText = "Nothing to show yet" }) {
   const items = data.filter(d => Number(d.value) > 0);
   const total = items.reduce((a, d) => a + Number(d.value), 0);
@@ -3473,36 +3461,36 @@ const popularScore = (h) => (Number(h.averageRating) || 0) * Math.log(2 + (Numbe
 const SPEC_ICON = { "Dentist": "tooth", "General Physician": "steth", "ENT": "ear", "Ophthalmology": "eye", "Dermatology": "drop", "Cardiology": "heart", "Gastroenterology": "food", "Orthopedics": "bone", "Neurology": "brain", "Pulmonology": "lung", "Gynecology": "leaf", "Pediatrics": "user", "Urology": "drop", "Endocrinology": "check", "Mental Health": "leaf" };
 // Cards tinted with hsl(var(--h) …) use only hues from the brand palette
 // (amber, olive, terracotta, gold, sage) instead of any random hue (which gave purple/pink cards).
-const PALETTE_HUES = [33, 84, 18, 44, 100];
+const PALETTE_HUES = [348, 8, 22, 34, 356];
 const hueOf = (str) => PALETTE_HUES[[...String(str || "")].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 9973, 7) % PALETTE_HUES.length];
 const SC_CSS = `
-.sc-hero{position:relative;overflow:hidden;border-radius:22px;padding:30px;border:1px solid var(--line,#533416);
-  background:radial-gradient(120% 150% at 0% 0%,color-mix(in srgb,var(--brand,#ce7f20) 40%,transparent),transparent 60%),
-             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,#8fa866 28%,transparent),transparent 60%);
+.sc-hero{position:relative;overflow:hidden;border-radius:22px;padding:30px;border:1px solid var(--line,#cfc8b8);
+  background:radial-gradient(120% 150% at 0% 0%,color-mix(in srgb,var(--brand,#6e2232) 40%,transparent),transparent 60%),
+             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,#a85a4a 28%,transparent),transparent 60%);
   display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
 .sc-hero h2{margin:6px 0 8px;font-size:clamp(26px,4vw,40px);line-height:1.1}
 .sc-float{font-size:92px;line-height:1;animation:scFloat 5s ease-in-out infinite;filter:drop-shadow(0 14px 22px rgba(0,0,0,.35))}
 .sc-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.sc-chip{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:color-mix(in srgb,var(--brand,#ce7f20) 18%,transparent);border:1px solid color-mix(in srgb,var(--brand,#ce7f20) 40%,transparent)}
+.sc-chip{padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;background:color-mix(in srgb,var(--brand,#6e2232) 18%,transparent);border:1px solid color-mix(in srgb,var(--brand,#6e2232) 40%,transparent)}
 .sc-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:30px 0 12px;flex-wrap:wrap}
 .sc-title h3{margin:0;font-size:22px}
 .sc-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:18px}
 .sc-list{display:grid;gap:12px}
-.sc-row{position:relative;display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;padding:14px;border-radius:16px;border:1px solid var(--line,#533416);
-  background:linear-gradient(145deg,color-mix(in srgb,var(--brand,#ce7f20) 10%,transparent),transparent);transition:transform .25s,box-shadow .25s,border-color .25s;animation:scRise .5s both}
-.sc-row:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.28);border-color:color-mix(in srgb,var(--brand,#ce7f20) 60%,transparent)}
-.sc-rank{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:700;background:color-mix(in srgb,var(--brand,#ce7f20) 20%,transparent)}
+.sc-row{position:relative;display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;padding:14px;border-radius:16px;border:1px solid var(--line,#cfc8b8);
+  background:linear-gradient(145deg,color-mix(in srgb,var(--brand,#6e2232) 10%,transparent),transparent);transition:transform .25s,box-shadow .25s,border-color .25s;animation:scRise .5s both}
+.sc-row:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.28);border-color:color-mix(in srgb,var(--brand,#6e2232) 60%,transparent)}
+.sc-rank{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:700;background:color-mix(in srgb,var(--brand,#6e2232) 20%,transparent)}
 .sc-avatar{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;font-size:16px}
 .sc-name{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .sc-stars{position:relative;display:inline-block;letter-spacing:2px;font-size:15px;line-height:1}
 .sc-stars-bg{color:color-mix(in srgb,currentColor 22%,transparent)}
 .sc-stars-fg{position:absolute;left:0;top:0;overflow:hidden;white-space:nowrap;color:#f2c14e}
 .sc-heat{height:5px;border-radius:99px;background:color-mix(in srgb,currentColor 12%,transparent);margin-top:8px;overflow:hidden}
-.sc-heat i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#8fa866,var(--brand,#ce7f20),#e58f8f);transform-origin:left;animation:scGrow .9s .15s both}
+.sc-heat i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#a85a4a,var(--brand,#6e2232),#35111b);transform-origin:left;animation:scGrow .9s .15s both}
 .sc-skel{height:76px;border-radius:16px;background:linear-gradient(100deg,transparent 30%,color-mix(in srgb,currentColor 12%,transparent) 50%,transparent 70%),color-mix(in srgb,currentColor 6%,transparent);background-size:200% 100%;animation:scShimmer 1.3s linear infinite}
-.sc-spot{position:relative;display:flex;gap:22px;align-items:center;padding:24px;border-radius:22px;border:1px solid color-mix(in srgb,var(--brand,#ce7f20) 50%,transparent);overflow:hidden;
-  background:linear-gradient(135deg,color-mix(in srgb,var(--brand,#ce7f20) 26%,transparent),color-mix(in srgb,#8fa866 14%,transparent))}
-.sc-spot::after{content:"";position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,color-mix(in srgb,var(--brand,#ce7f20) 30%,transparent),transparent 30%);animation:scSpin 9s linear infinite;pointer-events:none}
+.sc-spot{position:relative;display:flex;gap:22px;align-items:center;padding:24px;border-radius:22px;border:1px solid color-mix(in srgb,var(--brand,#6e2232) 50%,transparent);overflow:hidden;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--brand,#6e2232) 26%,transparent),color-mix(in srgb,#a85a4a 14%,transparent))}
+.sc-spot::after{content:"";position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,color-mix(in srgb,var(--brand,#6e2232) 30%,transparent),transparent 30%);animation:scSpin 9s linear infinite;pointer-events:none}
 .sc-spot>*{position:relative;z-index:1}
 .sc-spot-emoji{font-size:64px;line-height:1;animation:scFloat 4s ease-in-out infinite}
 .sc-fade{animation:scFade .5s both}
@@ -3516,23 +3504,23 @@ const SC_CSS = `
 .sc-back{transform:rotateY(180deg);background:linear-gradient(150deg,hsl(var(--h) 70% 55% / .38),hsl(var(--h) 70% 40% / .12));justify-content:center;gap:8px;font-size:14px;line-height:1.55;overflow:auto}
 .sc-emoji{font-size:44px;line-height:1}
 .sc-hint{font-size:12px;opacity:.65}
-.sc-habit{position:relative;overflow:hidden;display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:center;padding:26px;border-radius:22px;border:1px solid var(--line,#533416);
-  background:linear-gradient(135deg,color-mix(in srgb,#8fa866 14%,transparent),color-mix(in srgb,var(--brand,#ce7f20) 12%,transparent))}
+.sc-habit{position:relative;overflow:hidden;display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:center;padding:26px;border-radius:22px;border:1px solid var(--line,#cfc8b8);
+  background:linear-gradient(135deg,color-mix(in srgb,#a85a4a 14%,transparent),color-mix(in srgb,var(--brand,#6e2232) 12%,transparent))}
 @media(max-width:720px){.sc-habit{grid-template-columns:1fr;justify-items:center;text-align:center}}
 .sc-ring{position:relative;width:132px;height:132px}
 .sc-ring svg{transform:rotate(-90deg)}
 .sc-ring-num{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-weight:800;font-size:30px;line-height:1}
 .sc-ring-num small{display:block;font-size:11px;font-weight:600;opacity:.7;margin-top:2px}
 .sc-orbs{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
-.sc-orb{width:58px;height:70px;border-radius:18px;border:1px solid var(--line,#533416);background:color-mix(in srgb,currentColor 5%,transparent);color:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;transition:transform .2s,background .3s}
+.sc-orb{width:58px;height:70px;border-radius:18px;border:1px solid var(--line,#cfc8b8);background:color-mix(in srgb,currentColor 5%,transparent);color:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;transition:transform .2s,background .3s}
 .sc-orb:hover{transform:translateY(-3px)}
 .sc-orb .dow{font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.5px}
 .sc-orb .num{font-size:18px;font-weight:700}
-.sc-orb.today{outline:2px solid var(--brand,#ce7f20);outline-offset:2px;animation:scPulse 2s ease-in-out infinite}
-.sc-orb.on{background:linear-gradient(145deg,#8fa866,var(--brand,#ce7f20));color:#2b1a08;border-color:transparent}
+.sc-orb.today{outline:2px solid var(--brand,#6e2232);outline-offset:2px;animation:scPulse 2s ease-in-out infinite}
+.sc-orb.on{background:linear-gradient(145deg,#a85a4a,var(--brand,#6e2232));color:#f7f1e8;border-color:transparent}
 .sc-orb.on .num{animation:scPop .4s both}
 .sc-badges{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
-.sc-badge{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:14px;font-size:13px;font-weight:600;border:1px dashed var(--line,#533416);opacity:.45;filter:grayscale(1)}
+.sc-badge{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:14px;font-size:13px;font-weight:600;border:1px dashed var(--line,#cfc8b8);opacity:.45;filter:grayscale(1)}
 .sc-badge.on{opacity:1;filter:none;border:1px solid color-mix(in srgb,#f2c14e 70%,transparent);background:color-mix(in srgb,#f2c14e 16%,transparent);animation:scPop .5s both}
 .sc-confetti{position:absolute;left:50%;top:40%;pointer-events:none}
 .sc-confetti i{position:absolute;width:8px;height:13px;border-radius:2px;opacity:0;animation:scConf 1.7s ease-out var(--d) forwards}
@@ -3542,7 +3530,7 @@ const SC_CSS = `
 @keyframes scShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
 @keyframes scSpin{to{transform:rotate(360deg)}}
 @keyframes scFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes scPulse{0%,100%{outline-color:var(--brand,#ce7f20)}50%{outline-color:transparent}}
+@keyframes scPulse{0%,100%{outline-color:var(--brand,#6e2232)}50%{outline-color:transparent}}
 @keyframes scPop{0%{transform:scale(.4)}70%{transform:scale(1.25)}100%{transform:scale(1)}}
 @keyframes scConf{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--x),calc(var(--y) + 280px)) rotate(var(--r))}}
 @media (prefers-reduced-motion:reduce){.sc-float,.sc-spot-emoji,.sc-spot::after,.sc-orb.today,.sc-row,.sc-heat i,.sc-skel,.sc-confetti i{animation:none!important}.sc-inner{transition:none}}
@@ -3725,7 +3713,7 @@ function SpecialtyCare({ spec, city, base, chooseHospital, go }) {
       <div className="sc-habit">
         {burst && <div className="sc-confetti" aria-hidden="true">{confetti.map((p, i) => <i key={i} style={{ "--x": p.x + "px", "--y": p.y + "px", "--r": p.r + "deg", "--d": p.d + "s", background: `hsl(${p.h} 85% 60%)` }} />)}</div>}
         <div className="sc-ring" role="img" aria-label={`${weekCount} of 7 days done this week`}>
-          <svg width="132" height="132" viewBox="0 0 132 132"><circle cx="66" cy="66" r="50" fill="none" stroke="currentColor" strokeOpacity=".12" strokeWidth="12" /><circle cx="66" cy="66" r="50" fill="none" stroke="url(#scg)" strokeWidth="12" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - weekCount / 7)} style={{ transition: "stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)" }} /><defs><linearGradient id="scg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#8fa866" /><stop offset="100%" stopColor="#ce7f20" /></linearGradient></defs></svg>
+          <svg width="132" height="132" viewBox="0 0 132 132"><circle cx="66" cy="66" r="50" fill="none" stroke="currentColor" strokeOpacity=".12" strokeWidth="12" /><circle cx="66" cy="66" r="50" fill="none" stroke="url(#scg)" strokeWidth="12" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - weekCount / 7)} style={{ transition: "stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)" }} /><defs><linearGradient id="scg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#a85a4a" /><stop offset="100%" stopColor="#6e2232" /></linearGradient></defs></svg>
           <div className="sc-ring-num"><span>{weekCount}/7<small>this week</small></span></div>
         </div>
         <div>
@@ -4080,7 +4068,7 @@ function CareProfileCard({ auth, apiBaseUrl = API.baseUrl, go, onProfileSaved })
   </section>;
 }
 
-const PERK_TONES = ["#CE7F20", "#607938", "#A0673A", "#C9A227", "#7E9A55", "#B85C2E"];
+const PERK_TONES = ["#6E2232", "#76352E", "#141110", "#8C2A3F", "#5A3A2E", "#4A1726"];
 function WeeklyPerks({ auth }) {
   const uid = (auth && (auth.email || auth.id || auth.sub)) || "guest";
   const week = perkWeekKey();
@@ -5064,10 +5052,10 @@ html:has(.app.pfx){scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:c
 .pfx-aurora{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
 .pfx-aurora i{position:absolute;border-radius:50%;filter:blur(120px)}
 .pfx-aurora i:nth-child(1){width:44vmax;height:44vmax;left:-14vmax;top:-16vmax;background:var(--brand);opacity:.12;animation:pfxDrift1 40s ease-in-out infinite alternate}
-.pfx-aurora i:nth-child(2){width:36vmax;height:36vmax;right:-14vmax;top:22vh;background:#607938;opacity:.10;animation:pfxDrift2 46s ease-in-out infinite alternate}
-.pfx-aurora i:nth-child(3){width:32vmax;height:32vmax;left:26vw;bottom:-22vmax;background:#eedfc7;opacity:.05;animation:pfxDrift3 44s ease-in-out infinite alternate}
+.pfx-aurora i:nth-child(2){width:36vmax;height:36vmax;right:-14vmax;top:22vh;background:#76352e;opacity:.08;animation:pfxDrift2 46s ease-in-out infinite alternate}
+.pfx-aurora i:nth-child(3){width:32vmax;height:32vmax;left:26vw;bottom:-22vmax;background:#35111b;opacity:.06;animation:pfxDrift3 44s ease-in-out infinite alternate}
 :root[data-theme="light"] .pfx-aurora i{opacity:.06!important}
-.pfx-scroll{position:fixed;left:0;top:0;height:2px;width:100%;transform-origin:left;transform:scaleX(0);z-index:100001;pointer-events:none;background:var(--brand)}
+.pfx-scroll{position:fixed;left:0;top:0;height:2px;width:100%;transform-origin:left;transform:scaleX(var(--p,0));z-index:100001;pointer-events:none;background:var(--brand)}
 
 /* ---------- page + nav ---------- */
 .pfx main.main{animation:pfxPage .5s cubic-bezier(.2,.8,.2,1) backwards}
@@ -5449,7 +5437,7 @@ function useFx(enabled, page) {
       requestAnimationFrame(() => {
         ticking = false;
         const h = document.documentElement.scrollHeight - window.innerHeight;
-        if (bar) bar.style.transform = `scaleX(${h > 0 ? Math.min(1, window.scrollY / h) : 0})`;
+        if (bar) bar.style.setProperty("--p", String(h > 0 ? Math.min(1, window.scrollY / h) : 0));
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true }); onScroll();
@@ -6058,6 +6046,222 @@ function AttentionToday({ reviews = [], name = "", open, go }) {
   </section>;
 }
 
+const EDITORIAL_CSS = `
+/* =====================================================================
+   EDITORIAL THEME: paper, ink and wine.
+   Heavy condensed display type (Anton), italic serif accents (Cormorant
+   Garamond), clean sans body (IBM Plex Sans), thin rules, square buttons
+   in letter-spaced capitals, and a deep-wine frame around the page.
+   Loaded after every other stylesheet so it sets the final look.
+   ===================================================================== */
+:root {
+  --display: "Anton", "Oswald", Impact, "Arial Narrow", sans-serif;
+  --accent-serif: "Cormorant Garamond", "Cormorant", Georgia, serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 2px;
+}
+body { font-family: var(--sans) !important; letter-spacing: .005em; }
+::selection { background: var(--brand); color: var(--on-brand); }
+
+/* Paper grain: a faint noise texture over the page background */
+.app { position: relative; isolation: isolate; }
+.app::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.3  0 0 0 0 0.22  0 0 0 0 0.18  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+:root[data-theme="dark"] .app::before { opacity: .25; }
+
+/* Deep-wine frame around the whole page */
+.app::after {
+  content: ""; position: fixed; inset: 0; z-index: 100002; pointer-events: none;
+  border: 8px solid var(--frame);
+}
+@media (max-width: 720px) { .app::after { border-width: 4px; } }
+
+/* Scroll progress: a thin vertical wine rule on the left */
+.pfx-scroll {
+  left: 22px !important; top: 0 !important; width: 2px !important; height: 100vh !important;
+  transform-origin: top !important; transform: scaleY(var(--p, 0)) !important;
+  background: var(--brand) !important; opacity: .85;
+}
+@media (max-width: 900px) {
+  .pfx-scroll { left: 0 !important; width: 100% !important; height: 3px !important; transform-origin: left !important; transform: scaleX(var(--p, 0)) !important; }
+}
+.pfx-aurora { opacity: .55; }
+:root[data-theme="light"] .pfx-aurora { display: none; }
+
+/* ---------------- Typography ---------------- */
+h1, .phead h1, .att-head h2 {
+  font-family: var(--display) !important; font-weight: 400 !important; text-transform: uppercase;
+  letter-spacing: .005em !important; line-height: .95 !important; color: var(--text) !important;
+}
+.phead h1 { font-size: clamp(2.6rem, 5.4vw, 4.6rem) !important; margin: 0 0 10px !important; }
+.phead p {
+  font-family: var(--accent-serif) !important; font-style: italic; font-size: clamp(1.1rem, 1.6vw, 1.35rem) !important;
+  line-height: 1.4 !important; color: var(--muted) !important; max-width: 760px;
+}
+.phead { border-bottom: 1px solid var(--line); padding-bottom: 18px !important; margin-bottom: 26px !important; }
+h2.ph2, .ph2 {
+  font-family: var(--display) !important; font-weight: 400 !important; text-transform: uppercase;
+  letter-spacing: .01em !important; font-size: clamp(1.35rem, 2.2vw, 1.75rem) !important; line-height: 1.05 !important;
+}
+h3 { letter-spacing: .005em; }
+.n, .kpi .l, .lp-eyebrow, .sn-h, .hero-eyebrow, th {
+  font-family: var(--sans) !important; text-transform: uppercase; letter-spacing: .2em !important;
+  font-size: 11px !important; font-weight: 700 !important;
+}
+.n, .lp-eyebrow { color: var(--brand) !important; }
+.kpi .v, .att-big, .pk-ring span b, .three h3, .pfx-stat b {
+  font-family: var(--display) !important; font-weight: 400 !important; letter-spacing: .01em !important;
+}
+.kpi .v, .att-big { font-size: clamp(2.2rem, 3.6vw, 3rem) !important; line-height: 1 !important; }
+a { color: var(--brand); text-underline-offset: 3px; }
+a:hover { color: var(--text); }
+
+/* ---------------- Surfaces ---------------- */
+.panel, .lp-card, .pfx-live, .sc-row, .sc-hero, .sc-spot, .sc-habit, .detail, .decision, .toolbar {
+  border-radius: var(--radius) !important; box-shadow: none !important;
+  border: 1px solid var(--line) !important; background: var(--surface) !important;
+}
+.panel { position: relative; }
+.panel::after {
+  content: ""; position: absolute; left: -1px; top: -1px; width: 38px; height: 3px; background: var(--brand); pointer-events: none;
+}
+.grid2 > .panel, .three > div { border-radius: var(--radius) !important; }
+hr { border: 0; border-top: 1px solid var(--line); }
+
+/* ---------------- Buttons ---------------- */
+.btn, .act-tab, .seg button, .tabs button, .pk-done-btn, .hero-cta, .nav-get-started, .hero-explore, .sn-item .count {
+  border-radius: 0 !important;
+}
+.btn, .pk-done-btn {
+  font-family: var(--sans) !important; text-transform: uppercase; letter-spacing: .16em !important;
+  font-size: 11.5px !important; font-weight: 700 !important; padding: 11px 18px !important; min-height: 40px;
+  border: 1px solid var(--text) !important; background: transparent !important; color: var(--text) !important;
+  transition: background .2s, color .2s, transform .2s, border-color .2s !important;
+}
+.btn:hover:not(:disabled) { background: var(--text) !important; color: var(--bg) !important; }
+.btn.pri, .seg button.on, .tabs button.on {
+  background: var(--brand-strong) !important; border-color: var(--brand-strong) !important; color: var(--on-brand) !important;
+}
+.btn.pri:hover:not(:disabled) { background: var(--text) !important; border-color: var(--text) !important; color: var(--bg) !important; }
+.btn:disabled { opacity: .45; }
+.btn:focus-visible, .act-tab:focus-visible, .nav:focus-visible, .sn-item:focus-visible { outline: 2px solid var(--brand) !important; outline-offset: 3px; }
+.crumb { text-transform: uppercase; letter-spacing: .16em; font-size: 11px; font-weight: 700; color: var(--brand) !important; background: none; border: 0; cursor: pointer; padding: 0; }
+
+/* Tabs as an underlined index */
+.act-tabs { gap: 0 !important; border-bottom: 1px solid var(--line); }
+.act-tab {
+  border: 0 !important; border-bottom: 2px solid transparent !important; background: transparent !important;
+  text-transform: uppercase; letter-spacing: .14em; font-size: 11.5px !important; font-weight: 700; padding: 12px 16px !important; color: var(--muted) !important;
+}
+.act-tab:hover { color: var(--text) !important; }
+.act-tab.on { color: var(--brand) !important; border-bottom-color: var(--brand) !important; }
+
+/* ---------------- Form fields ---------------- */
+.f, input.f, select.f, textarea.f, .pfx-search-input {
+  border-radius: 0 !important; background: color-mix(in srgb, var(--surface) 70%, var(--bg)) !important;
+  border: 1px solid var(--line) !important; border-bottom-color: color-mix(in srgb, var(--text) 45%, var(--line)) !important;
+  color: var(--text) !important;
+}
+.f:focus, .pfx-search-input:focus { outline: none !important; border-color: var(--brand) !important; box-shadow: 0 2px 0 0 var(--brand) !important; }
+label.fl, .fl { text-transform: uppercase; letter-spacing: .14em; font-size: 10.5px !important; font-weight: 700 !important; color: var(--muted) !important; }
+
+/* ---------------- Chips & status ---------------- */
+.chip {
+  border-radius: 0 !important; text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px !important; font-weight: 700;
+  background: transparent !important; border: 1px solid currentColor !important;
+}
+.chip.approved { color: var(--ok) !important; }
+.chip.pending { color: var(--brand) !important; }
+.chip.rejected { color: var(--crit) !important; }
+
+/* ---------------- Tables ---------------- */
+table th { color: var(--muted) !important; border-bottom: 1px solid var(--text) !important; }
+table td { border-color: var(--line) !important; }
+tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, transparent) !important; }
+
+/* ---------------- Header ---------------- */
+.topbar, .topbar.app-nav, .topbar.landing-nav {
+  background: color-mix(in srgb, var(--bg) 94%, transparent) !important; backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--text) !important; box-shadow: none !important;
+  padding-left: clamp(22px, 4vw, 64px) !important; padding-right: clamp(22px, 4vw, 64px) !important;
+}
+.topbar .brand { font-family: var(--display) !important; text-transform: uppercase; letter-spacing: .03em !important; font-size: 26px !important; font-weight: 400 !important; }
+.topbar .brand span { font-family: var(--display) !important; }
+.topbar .brand svg { color: var(--brand) !important; }
+.topbar .brand-ai { font-family: var(--sans) !important; font-weight: 700 !important; letter-spacing: .18em !important; color: var(--brand) !important; }
+.top-nav .nav, .marketing-nav button {
+  border-radius: 0 !important; border: 0 !important; border-bottom: 2px solid transparent !important;
+  text-transform: uppercase; letter-spacing: .14em; font-size: 11.5px !important; font-weight: 700 !important;
+  color: var(--text) !important; background: transparent !important; min-height: 40px;
+}
+.top-nav .nav:hover, .marketing-nav button:hover { background: transparent !important; border-bottom-color: var(--line) !important; }
+.top-nav .nav.on { color: var(--brand) !important; background: transparent !important; border-bottom-color: var(--brand) !important; }
+.pfx .top-nav .nav.on::after { display: none !important; }
+.profile-button {
+  border-radius: 0 !important; background: var(--brand-strong) !important; color: var(--on-brand) !important; border: 0 !important;
+  text-transform: uppercase; letter-spacing: .12em; font-size: 11.5px !important; font-weight: 700;
+}
+.profile-button span, .profile-button svg { color: var(--on-brand) !important; }
+
+/* Doctor / organisation sidebar */
+@media (min-width: 901px) { .sidenav { border-right: 1px solid var(--line); padding-right: 14px !important; } }
+@media (max-width: 900px) { .sidenav { max-width: 100%; border-bottom: 1px solid var(--line); } }
+.sn-item { border-radius: 0 !important; color: var(--text) !important; }
+.sn-item:hover { background: transparent !important; color: var(--brand) !important; }
+.sn-item.on { background: transparent !important; box-shadow: inset 3px 0 0 var(--brand) !important; color: var(--brand) !important; }
+.sn-item .count, .count { background: var(--brand-strong) !important; color: var(--on-brand) !important; }
+
+.app-status { background: var(--bg) !important; border-top: 1px solid var(--text) !important; text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px !important; }
+.toast { border-radius: 0 !important; background: var(--text) !important; color: var(--bg) !important; text-transform: uppercase; letter-spacing: .12em; font-size: 12px; }
+
+/* ---------------- Patient health perks: wine-toned editorial cards ---------------- */
+.pk-face { border-radius: var(--radius) !important; box-shadow: none !important; border: 1px solid color-mix(in srgb, var(--tone) 45%, var(--line)) !important; }
+.pk-front { background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 9%, var(--surface)), var(--surface)) !important; }
+:root[data-theme="dark"] .pk-front { background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 22%, var(--surface)), var(--surface)) !important; }
+.pk-front::before { content: ""; position: absolute; left: 18px; right: 18px; top: 84px; border-top: 1px solid color-mix(in srgb, var(--tone) 30%, var(--line)); }
+.pk-icon { border-radius: 50% !important; color: var(--tone) !important; background: transparent !important; border: 1px solid color-mix(in srgb, var(--tone) 55%, transparent) !important; }
+:root[data-theme="dark"] .pk-icon { color: color-mix(in srgb, var(--tone) 40%, #ede6d8) !important; }
+.pk-num { color: var(--muted) !important; }
+.pk-title { font-family: var(--display) !important; font-weight: 400 !important; text-transform: uppercase; font-size: 21px !important; letter-spacing: .01em; line-height: 1.05 !important; }
+.pk-hint { font-family: var(--accent-serif); font-style: italic; font-size: 15px !important; }
+.pk-back { background: var(--tone) !important; color: #f7f1e8 !important; }
+.pk-back-title { font-family: var(--display); font-weight: 400 !important; text-transform: uppercase; font-size: 19px !important; letter-spacing: .01em; }
+.pk-back .pk-hint { color: rgba(247,241,232,.8) !important; }
+.pk-done-btn { color: var(--text) !important; border-color: var(--text) !important; background: transparent !important; }
+.pk-done-btn:hover { background: var(--tone) !important; border-color: var(--tone) !important; color: #f7f1e8 !important; }
+.pk-ring-bar { stroke: var(--brand) !important; }
+
+/* Specialty / art tiles tinted by hue use the wine family */
+.sc-chip { border-radius: 0 !important; }
+
+/* ---------------- Landing extras ---------------- */
+.lp-card { border-top: 3px solid var(--brand) !important; }
+.lp-ico { border-radius: 50% !important; background: transparent !important; border: 1px solid var(--brand); }
+.lp section h2, .lp h2 { font-family: var(--display) !important; font-weight: 400 !important; text-transform: uppercase; letter-spacing: .01em; line-height: 1; }
+
+/* Segmented controls (e.g. theme picker) wrap instead of overflowing */
+.seg { flex-wrap: wrap; max-width: 100%; }
+.seg button { flex: 1 1 auto; }
+/* Small screens: long names in the profile button never push the header wider than the screen */
+@media (max-width: 560px) {
+  .topbar .brand { font-size: 21px !important; }
+  .profile-button { letter-spacing: .06em !important; padding: 8px 10px !important; gap: 6px !important; }
+  .profile-button > span:not([aria-hidden]) { display: inline-block; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+}
+/* Section headings that hold an icon + text stay left-aligned (index.css makes .ph2 a spaced flex row) */
+.pk-head .ph2 { display: flex !important; justify-content: flex-start !important; align-items: center; gap: 10px; }
+/* "AI" badge: small superscript beside the logo, never floating above it */
+.topbar .brand-ai {
+  position: static !important; top: auto !important; align-self: flex-start !important;
+  margin: 2px 0 0 -4px !important; font-size: 10px !important; line-height: 1 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn, .act-tab { transition: none !important; }
+}
+`;
+
 /* ---- Provider navigation: grouped left sidebar ---- */
 function SideNav({ page, go, waiting, role }) {
   const groups = NAV.map(([g, items]) => [g, items.filter(([k]) => k !== "home" && !(role === "doctor" && k === "investigation"))]).map(([g, items]) => [g, g === "Account" ? [...items, ["contact", "Contact us", "contact"]] : items]).map(([g, items]) => [g, g === "Overview" && role === "doctor" ? [...items, ["my-patients", "My patients", "user"]] : items]).filter(([, items]) => items.length);
@@ -6427,6 +6631,7 @@ function App() {
   return <>
     <style>{THEME_CSS}</style>
     <style>{PX_CSS}</style>
+    <style>{EDITORIAL_CSS}</style>
     <div className={"app" + (fx ? " pfx" : "")}>
       {fx && <><div className="pfx-aurora" aria-hidden="true"><i /><i /><i /></div><div className="pfx-scroll" aria-hidden="true" /></>}
       <header className={"topbar" + (landingLike ? " landing-nav" : " app-nav") + (showSide ? " has-side" : "")}>

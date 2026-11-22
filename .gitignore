@@ -22,3 +22,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local Chrome profile used by the Google Maps scraper (cookies, logins, history). Never commit.
+.maps_profile/
