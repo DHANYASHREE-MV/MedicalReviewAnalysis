@@ -1,7 +1,7 @@
 # Builds the AegisCare frontend (aegiscare/) and publishes it to GitHub Pages.
 # One-time setup: repository Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
-# Optional: add a repository variable VITE_API_BASE_URL (Settings -> Secrets and variables -> Actions -> Variables)
-# pointing at your hosted FastAPI backend, e.g. https://your-api.example.com/api
+# The site talks to the backend at https://aegiscare-api.onrender.com/api (Render). To use another backend, add a
+# repository variable VITE_API_BASE_URL (Settings -> Secrets and variables -> Actions -> Variables).
 name: Deploy to GitHub Pages
 
 on:
@@ -38,7 +38,8 @@ jobs:
       - run: npm run build
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          # Hosted FastAPI backend on Render. A repository variable VITE_API_BASE_URL overrides it.
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://aegiscare-api.onrender.com/api' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
