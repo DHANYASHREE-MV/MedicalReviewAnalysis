@@ -3827,7 +3827,7 @@ function SpecialtyCare({ spec, city, base, chooseHospital, go }) {
   </section>;
 }
 
-function PatientDashboard({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, prefs }) {
+function PatientDashboard({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, prefs, onAbhaChange }) {
   const stored = (() => { try { return JSON.parse(sessionStorage.getItem("aegiscare_care_search") || "null") || {}; } catch (_) { return {}; } })();
   const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
   const [appointments, setAppointments] = useState([]);
@@ -3996,11 +3996,27 @@ function PatientDashboard({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider
       <button className="btn" onClick={() => go("onboarding")}>Edit profile</button>
     </PageHead>
 
-    <AbhaReminder auth={auth} go={go} />
-
     <PatientHero name={auth?.name} searchCount={searchCount} appointmentCount={appointmentCount}
       search={{ value: symptom, onChange: setSymptom, busy: careBusy, onSubmit: (e) => { careSearch(e); setActiveTab("find"); setTimeout(() => document.getElementById("care-finder")?.scrollIntoView({ behavior: "smooth", block: "start" }), 250); } }}
       onFind={() => { setActiveTab("find"); window.scrollTo({ top: 0, behavior: "smooth" }); }} onAppointments={() => go("patient-appointments")} onTry={startTryIt} />
+
+      <div className="panel kpis" style={{ marginBottom: 20 }}>
+        <div className="kpi"><div className="l">Care searches</div><div className="v"><CountUp value={searchCount} /></div><div className="d">{searchCount === 0 ? "Your first search is one step away" : searchCount === 1 ? "One search started — explore again anytime" : `${searchCount} searches and Try It sessions recorded`}</div></div>
+        <div className="kpi"><div className="l">Appointment requests</div><div className="v"><CountUp value={appointmentCount} /></div><div className="d">{appointmentCount === 0 ? "Your requests will appear here" : "Saved to your account"}</div></div>
+        <div className="kpi"><div className="l">Your care location</div><div className="v" style={{ fontSize: 20 }}>{auth?.profile?.city || city || "Not set yet"}</div><div className="d">{auth?.profile?.city || city ? "Used to narrow database matches" : "Add a city to make matching more relevant"}</div></div>
+      </div>
+
+
+    <div className="grid2 mycare-pair" style={{ alignItems: "stretch", marginBottom: 20 }}>
+      <section className="panel" style={{ margin: 0 }}>
+        <span className="n">{journeyStage.eyebrow}</span>
+        <h2 className="ph2" style={{ marginTop: 8 }}>{journeyStage.title}</h2>
+        <p className="muted" style={{ maxWidth: 650, lineHeight: 1.65, margin: "10px 0 16px" }}>{journeyStage.body}</p>
+        <button className="btn pri" onClick={() => openTab(journeyStage.tab)}>{journeyStage.cta} <span aria-hidden="true">↗</span></button>
+        {latestAppointment && <div className="rowline" style={{ marginTop: 16 }}><span className="muted">Latest request</span><b>{latestAppointment.provider_name} · {dateLabel(latestAppointment.appointment_date)} · {latestAppointment.status || "requested"}</b></div>}
+      </section>
+      <div className="mycare-abha"><AbhaCard apiBaseUrl={apiBaseUrl} onAbhaChange={onAbhaChange} /></div>
+    </div>
 
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
       {tabs.slice(0, 1).map(([key, label]) => <button key={key} className={"btn" + (activeTab === key ? " pri" : "")} onClick={() => setActiveTab(key)}>{label}</button>)}
@@ -4040,22 +4056,6 @@ function PatientDashboard({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider
       </section>
     </div>}
 
-    {activeTab === "find" && <>
-      <div className="panel kpis" style={{ marginBottom: 20 }}>
-        <div className="kpi"><div className="l">Care searches</div><div className="v"><CountUp value={searchCount} /></div><div className="d">{searchCount === 0 ? "Your first search is one step away" : searchCount === 1 ? "One search started — explore again anytime" : `${searchCount} searches and Try It sessions recorded`}</div></div>
-        <div className="kpi"><div className="l">Appointment requests</div><div className="v"><CountUp value={appointmentCount} /></div><div className="d">{appointmentCount === 0 ? "Your requests will appear here" : "Saved to your account"}</div></div>
-        <div className="kpi"><div className="l">Your care location</div><div className="v" style={{ fontSize: 20 }}>{auth?.profile?.city || city || "Not set yet"}</div><div className="d">{auth?.profile?.city || city ? "Used to narrow database matches" : "Add a city to make matching more relevant"}</div></div>
-      </div>
-
-      <section className="panel" style={{ marginBottom: 20 }}>
-        <span className="n">{journeyStage.eyebrow}</span>
-        <h2 className="ph2" style={{ marginTop: 8 }}>{journeyStage.title}</h2>
-        <p className="muted" style={{ maxWidth: 650, lineHeight: 1.65, margin: "10px 0 16px" }}>{journeyStage.body}</p>
-        <button className="btn pri" onClick={() => openTab(journeyStage.tab)}>{journeyStage.cta} <span aria-hidden="true">↗</span></button>
-        {latestAppointment && <div className="rowline" style={{ marginTop: 16 }}><span className="muted">Latest request</span><b>{latestAppointment.provider_name} · {dateLabel(latestAppointment.appointment_date)} · {latestAppointment.status || "requested"}</b></div>}
-      </section>
-
-    </>}
 
     {activeTab === "activity" && (() => {
       const bySpec = {};
@@ -4255,7 +4255,6 @@ function PatientGlow({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, onP
   return <div className="page">
     <PageHead title="Prep & Perk" sub="Pick up daily health tips, keep your habit streak going and get ready for your visit." />
     <CareProfileCard auth={auth} apiBaseUrl={apiBaseUrl} go={go} onProfileSaved={onProfileSaved} />
-    <AbhaCard apiBaseUrl={apiBaseUrl} onAbhaChange={onAbhaChange} />
     <WeeklyPerks auth={auth} />
     <SpecialtyCare key={spec + "|" + city} spec={spec} city={city} base={base} chooseHospital={chooseHospital} go={go} />
     {prepTopic
@@ -6001,7 +6000,7 @@ function KpiVal({ v }) {
 }
 
 /* Latest patient feedback ticker for doctor / organization dashboards (cycles through real reviews). */
-function LiveFeed({ reviews = [] }) {
+function LiveFeed({ reviews = [], onOpen }) {
   const items = useMemo(() => reviews.filter(r => r && (r.text || r.review)).slice(0, 8), [reviews]);
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -6012,7 +6011,9 @@ function LiveFeed({ reviews = [] }) {
   if (!items.length) return null;
   const k = i % items.length, r = items[k];
   const neg = r.sentiment === "Negative";
-  return <div className="pfx-live" role="status" aria-live="off">
+  return <div className={"pfx-live" + (onOpen ? " is-link" : "")} role={onOpen ? "link" : "status"} aria-live="off" tabIndex={onOpen ? 0 : undefined}
+    aria-label={onOpen ? "Latest patient feedback. Open all reviews" : undefined}
+    onClick={onOpen} onKeyDown={onOpen ? (e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }) : undefined}>
     <span className="live-tag"><i />LATEST FEEDBACK</span>
     <div className="live-body" key={String(r.id) + "-" + k}>
       <span className="chip" style={neg ? { color: "var(--crit)", borderColor: "var(--crit)" } : { color: "var(--ok)", borderColor: "var(--ok)" }}>{r.sentiment || "Review"}</span>
@@ -6021,6 +6022,7 @@ function LiveFeed({ reviews = [] }) {
       <span className="live-text">“{r.text || r.review}”</span>
     </div>
     {items.length > 1 && <span className="live-count">{k + 1}/{items.length}</span>}
+    {onOpen && <span className="live-open" aria-hidden="true">View all reviews →</span>}
     {items.length > 1 && <span className="live-bar" key={"bar-" + k} />}
   </div>;
 }
@@ -6057,7 +6059,8 @@ function SearchProgress() {
 function PatientHero({ name = "", searchCount = 0, appointmentCount = 0, onFind, onAppointments, onTry, eyebrow = "YOUR CARE SPACE", subtitle, art = "patient", stats, actions, search }) {
   const hour = new Date().getHours();
   const greet = hour < 5 ? "Hello" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : hour < 22 ? "Good evening" : "Hello";
-  const first = String(name || "").trim().split(/\s+/)[0];
+  const parts = String(name || "").trim().split(/\s+/);
+  const first = /^(dr|prof)\.?$/i.test(parts[0] || "") && parts[1] ? parts[0] + " " + parts[1] : parts[0];
   const acts = actions || [
     { label: "Find care", pri: true, onClick: onFind },
     { label: "My appointments", onClick: onAppointments },
@@ -6112,7 +6115,8 @@ function PatientHero({ name = "", searchCount = 0, appointmentCount = 0, onFind,
 function AttentionToday({ reviews = [], name = "", open, go }) {
   const hour = new Date().getHours();
   const greet = hour < 5 ? "Hello" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : hour < 22 ? "Good evening" : "Hello";
-  const first = String(name || "").trim().split(/\s+/)[0];
+  const parts = String(name || "").trim().split(/\s+/);
+  const first = /^(dr|prof)\.?$/i.test(parts[0] || "") && parts[1] ? parts[0] + " " + parts[1] : parts[0];
   const openHigh = reviews.filter(r => r.status === "pending" && r.severity >= 4).sort((x, y) => y.severity - x.severity);
   const pending = reviews.filter(r => r.status === "pending").length;
   return <section className="att" aria-label="Needs attention today">
@@ -6205,7 +6209,9 @@ h3 { letter-spacing: .005em; }
 .kpi .v, .att-big, .pk-ring span b, .three h3, .pfx-stat b {
   font-family: var(--display) !important; font-weight: 400 !important; letter-spacing: .01em !important;
 }
-.kpi .v, .att-big { font-size: clamp(2.2rem, 3.6vw, 3rem) !important; line-height: 1 !important; }
+.kpi .v:not([style*="font-size"]), .att-big { font-size: clamp(2.2rem, 3.6vw, 3rem) !important; line-height: 1 !important; }
+/* KPI tiles that hold words (e.g. a city) keep a readable size instead of the big number font */
+.kpi .v[style*="font-size"] { font-family: var(--sans) !important; font-weight: 600 !important; font-size: 20px !important; line-height: 1.3 !important; padding-top: 10px; }
 a { color: var(--brand); text-underline-offset: 3px; }
 a:hover { color: var(--text); }
 
@@ -6378,6 +6384,30 @@ tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, transparent) !i
 @keyframes logoBeat { 0%,100% { stroke-dasharray: 40; stroke-dashoffset: 0; } 50% { stroke-dasharray: 40; stroke-dashoffset: 40; } }
 .auth-brand { display: inline-flex; align-items: center; gap: 12px; font-family: var(--display); text-transform: uppercase; letter-spacing: .03em; font-size: 22px; }
 
+
+/* ---------------- Header menu for every role ----------------
+   Logo and profile on the first row; the full menu on its own row underneath. It wraps
+   onto a second line when needed, so every label stays visible (no sideways scrolling). */
+.topbar.app-nav { flex-wrap: wrap !important; row-gap: 6px !important; padding-top: 10px !important; padding-bottom: 6px !important; }
+.topbar.app-nav .top-nav {
+  order: 3; flex: 1 1 100% !important; display: flex !important; flex-wrap: wrap !important;
+  justify-content: flex-start !important; overflow: visible !important; gap: 2px 4px !important; padding-bottom: 0 !important;
+}
+.topbar.app-nav .top-nav .nav { padding: 8px 10px !important; font-size: 11.5px !important; letter-spacing: .12em !important; min-height: 38px; }
+.topbar.app-nav .top-nav .nav .count { margin-left: 6px; padding: 0 6px; font-size: 10.5px; line-height: 18px; letter-spacing: 0; }
+.topbar.app-nav > div:last-child { margin-left: auto !important; }
+.topbar.app-nav .theme-toggle-unused { display: none; }
+
+/* ---------------- Latest feedback strip opens Reviews ---------------- */
+.pfx-live.is-link { cursor: pointer; transition: border-color .2s, transform .2s; }
+.pfx-live.is-link:hover { border-color: var(--brand) !important; transform: translateY(-1px); }
+.pfx-live.is-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.live-open { flex: none; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--brand); white-space: nowrap; }
+@media (max-width: 900px) { .live-open { display: none; } }
+
+/* ---------------- My care: "your next step" and ABHA side by side ---------------- */
+.mycare-pair > * { min-width: 0; }
+.mycare-abha > section { margin: 0 !important; height: 100%; box-sizing: border-box; }
 
 /* Phones: logo, switch and profile share one compact row */
 @media (max-width: 560px) {
@@ -6753,7 +6783,8 @@ function App() {
   // Animation layer: every signed-in role (patient, doctor, organization) inside the app, plus login / onboarding.
   const fx = (inApp && page !== "home") || ["login", "onboarding"].includes(page);
   useFx(fx, page);
-  const showSide = inApp && !landingLike && googleAuth.role !== "patient";
+  // Navigation lives in the header for every role, so the left sidebar is no longer shown.
+  const showSide = false;
   const waiting = reviews.filter(r => r.status === "pending").length;
   const review = reviews.find(r => r.id === sel);
   // dhanyashreemv63@gmail.com keeps the original full review-management console;
@@ -6762,13 +6793,13 @@ function App() {
   const setAbhaFlag = (v) => setGoogleAuth(a => ({ ...a, hasAbha: !!v }));
   const setHprFlag = (v) => setGoogleAuth(a => ({ ...a, hasHpr: !!v }));
   const dashboardView = googleAuth.role === "patient"
-    ? <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} />
+    ? <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} onAbhaChange={setAbhaFlag} />
     : (googleAuth.role === "organization" && !fullAccess)
       ? <OrgDashboard auth={googleAuth} reviews={reviews} go={setPage} />
       : <Dashboard reviews={reviews} open={open} go={setPage} pipelineStats={pipelineStats} />;
 
   const view = {
-    home: <Home explore={handleExplore} />, "patient-activities": <PatientActivities auth={googleAuth} go={setPage} apiBaseUrl={settings.api} />, "patient-records": <PatientRecords apiBaseUrl={settings.api} go={setPage} />, "patient-glow": <PatientGlow auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} onProfileSaved={d => { setGoogleAuth(mapAuth(d)); setToastMsg("Profile saved"); }} onAbhaChange={setAbhaFlag} />, "patient-appointments": <PatientAppointments apiBaseUrl={settings.api} go={setPage} prefill={apptPrefill} clearPrefill={() => setApptPrefill(null)} prefs={settings} defaultSpecialty={googleAuth.profile?.specialty || ""} auth={googleAuth} />, "patient-dashboard": <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} />, onboarding: <Onboarding apiBaseUrl={settings.api} auth={googleAuth} go={setPage} onSaved={d => { const nextAuth = mapAuth(d); setGoogleAuth(nextAuth); setPage(nextAuth.role === "patient" ? "patient-dashboard" : "dashboard"); setToastMsg("Profile saved"); }} />, login: <GoogleLogin apiBaseUrl={settings.api} go={setPage} signedIn={googleAuth.signedIn} email={googleAuth.email} />, try: <AgentPlayground go={next => { if (next === "try") return; setPage(next); }} apiBaseUrl={settings.api} role={googleAuth.role} />, dashboard: dashboardView, reviews: <Reviews reviews={reviews} open={open} pipelineStats={pipelineStats} />,
+    home: <Home explore={handleExplore} />, "patient-activities": <PatientActivities auth={googleAuth} go={setPage} apiBaseUrl={settings.api} />, "patient-records": <PatientRecords apiBaseUrl={settings.api} go={setPage} />, "patient-glow": <PatientGlow auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} onProfileSaved={d => { setGoogleAuth(mapAuth(d)); setToastMsg("Profile saved"); }} onAbhaChange={setAbhaFlag} />, "patient-appointments": <PatientAppointments apiBaseUrl={settings.api} go={setPage} prefill={apptPrefill} clearPrefill={() => setApptPrefill(null)} prefs={settings} defaultSpecialty={googleAuth.profile?.specialty || ""} auth={googleAuth} />, "patient-dashboard": <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} onAbhaChange={setAbhaFlag} />, onboarding: <Onboarding apiBaseUrl={settings.api} auth={googleAuth} go={setPage} onSaved={d => { const nextAuth = mapAuth(d); setGoogleAuth(nextAuth); setPage(nextAuth.role === "patient" ? "patient-dashboard" : "dashboard"); setToastMsg("Profile saved"); }} />, login: <GoogleLogin apiBaseUrl={settings.api} go={setPage} signedIn={googleAuth.signedIn} email={googleAuth.email} />, try: <AgentPlayground go={next => { if (next === "try") return; setPage(next); }} apiBaseUrl={settings.api} role={googleAuth.role} />, dashboard: dashboardView, reviews: <Reviews reviews={reviews} open={open} pipelineStats={pipelineStats} />,
     investigation: <Investigation review={review} reviews={reviews} setStatus={setStatus} setResponse={setResponse} go={setPage} toast={setToastMsg} />,
     action: <Action reviews={reviews} open={open} actionPlans={actionPlans} pipelineStats={pipelineStats} />, approval: <Approval reviews={reviews} setStatus={setStatus} onDelete={deleteRejectedReview} open={open} toast={setToastMsg} />,
     reports: <Reports reviews={reviews} />, "my-patients": googleAuth.role === "doctor" ? <DoctorAppointments apiBaseUrl={settings.api} onHprChange={setHprFlag} /> : dashboardView, settings: googleAuth.role === "patient"
@@ -6797,10 +6828,14 @@ function App() {
             {page === "onboarding" && <button className="nav-get-started" onClick={logout}>Sign out <span>↗</span></button>}
           </div>
         </> : <>
-          {googleAuth.role === "patient" && <nav className="top-nav" aria-label="Main navigation">
+          {inApp && <nav className="top-nav" aria-label="Main navigation">
             {(googleAuth.role === "patient"
               ? [["patient-dashboard", "My care", "dash"], ["patient-appointments", "Appointments", "check"], ["patient-records", "My records", "file"], ["patient-glow", "Prep & Perk", "glow"], ["patient-activities", "Activities", "pulse"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
-              : []
+              // Doctors and organisations: the same sections their sidebar had, now in the header.
+              : NAV.flatMap(([, items]) => items)
+                .filter(([k]) => k !== "home" && !(googleAuth.role === "doctor" && k === "investigation"))
+                .flatMap(item => item[0] === "try" && googleAuth.role === "doctor" ? [item, ["my-patients", "My patients", "user"]] : [item])
+                .concat([["contact", "Contact us", "contact"]])
             ).map(([k, l, ic]) =>
               <button key={k}
                 className={"nav" + ((page === k || (k === "patient-dashboard" && page === "dashboard")) ? " on" : "")}
@@ -6850,7 +6885,7 @@ function App() {
         {apiError && page !== "settings" && page !== "login" && page !== "onboarding" && <div className="panel" role="status" style={{ marginBottom: 16, borderColor: "var(--danger, #bd7777)" }}><b>Backend connection issue</b><p className="small" style={{ margin: "6px 0 0" }}>{apiError}. Check Settings → API connection and verify the dashboard, reviews, investigations, and action-plans endpoints.</p><button className="btn" style={{ marginTop: 10 }} onClick={() => setPage("settings")}>Open API settings</button></div>}
         {fx && page === "dashboard" && (googleAuth.role === "doctor" || googleAuth.role === "organization") && <AttentionToday name={googleAuth.name} open={open} go={setPage}
           reviews={googleAuth.role === "organization" && !fullAccess ? scopeReviewsToOrg(googleAuth.profile?.org_name, reviews).scoped : reviews} />}
-        {fx && page === "dashboard" && (googleAuth.role === "doctor" || googleAuth.role === "organization") && <LiveFeed reviews={reviews} />}
+        {fx && page === "dashboard" && (googleAuth.role === "doctor" || googleAuth.role === "organization") && <LiveFeed reviews={reviews} onOpen={() => setPage("reviews")} />}
         {page === "dashboard" && googleAuth.role === "doctor" && <DoctorQueueCard apiBaseUrl={settings.api} go={setPage} />}
         {page === "dashboard" && googleAuth.role === "doctor" && <DoctorHprCard apiBaseUrl={settings.api} onHprChange={setHprFlag} />}
         {view}
