@@ -24,13 +24,11 @@ const PLACEHOLDER = {
 };
 const TREND_LABELS = ["6w ago", "5w", "4w", "3w", "2w", "Last wk", "This wk"];
 
-function applyTheme(theme) {
+// The site uses one light theme everywhere (dark mode removed). Older saved
+// "system"/"dark" preferences are ignored, so every page looks the same.
+function applyTheme() {
   if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  const resolved = theme === "system"
-    ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
-    : theme;
-  root.setAttribute("data-theme", resolved || "dark");
+  document.documentElement.setAttribute("data-theme", "light");
 }
 
 const THEME_CSS = `
@@ -562,21 +560,6 @@ const Mark = ({ size = 30, title }) => <svg className="logo-mark" width={size} h
   <path className="logo-glyph logo-pulse" d="M24.6 35.8h3.4l1.9-3.9 2.9 7.6 2.4-5.6 1.4 1.9h3.1" fill="none" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
 </svg>;
 
-// Light / dark switch shown in every header. It stores the choice in the existing settings.
-function ThemeToggle({ theme, onChange }) {
-  const current = theme === "system"
-    ? (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme")) || "light"
-    : theme;
-  const next = current === "dark" ? "light" : "dark";
-  return <button type="button" className="theme-toggle" onClick={() => onChange(next)} aria-label={`Switch to ${next} mode`} title={`Switch to ${next} mode`}>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {current === "dark"
-        ? <g><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" /></g>
-        : <path d="M20.2 14.6A8.4 8.4 0 019.4 3.8 8.4 8.4 0 1020.2 14.6z" />}
-    </svg>
-    <span className="theme-toggle-label">{current === "dark" ? "Light" : "Dark"}</span>
-  </button>;
-}
 
 const GL = {
   heart: <path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z" />,
@@ -627,7 +610,27 @@ const Sev = ({ v }) => <span className={"sev " + sevTone(v)} title={`Severity ${
 const STATUS = { pending: "Awaiting approval", approved: "Approved", rejected: "Rejected", archived: "Archived" };
 const Status = ({ s }) => <span className={"chip " + s}>{STATUS[s]}</span>;
 const CatDot = ({ c }) => <span className="catl"><i style={{ background: CAT[c] }} />{c}</span>;
-const PageHead = ({ title, sub, children }) => <header className="phead"><div><h1>{title}</h1>{sub && <p>{sub}</p>}</div>{children && <div className="row">{children}</div>}</header>;
+// Heartbeat (ECG) rule used under page titles, in the footer and on the landing page.
+const EcgLine = ({ className = "" }) => <svg className={"ecg-line " + className} viewBox="0 0 600 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+  <path d="M0 22H236l7-5 6 5h9l6-18 8 34 7-25 5 9h12l8-6 7 6H600" />
+</svg>;
+const PageHead = ({ title, sub, children }) => <header className="phead"><div><h1>{title}</h1>{sub && <p>{sub}</p>}</div>{children && <div className="row">{children}</div>}<EcgLine className="phead-ecg" /></header>;
+
+// Line-art stethoscope and capsule for the landing page (decorative).
+const HeroMedical = () => <svg className="hero-medical" viewBox="0 0 320 320" aria-hidden="true" focusable="false">
+  <g className="hm-ink" fill="none" strokeLinecap="round" strokeLinejoin="round">
+    <path className="hm-draw" pathLength="1" d="M96 34c-4 52 22 74 50 92M176 34c4 52-22 74-50 92" />
+    <path className="hm-draw" pathLength="1" d="M146 126c0 58-14 84-40 104-30 23-26 66 10 72 34 6 56-18 70-44 12-23 30-34 52-32" />
+    <circle cx="96" cy="30" r="6" /><circle cx="176" cy="30" r="6" />
+  </g>
+  <circle className="hm-chest" cx="262" cy="226" r="26" />
+  <circle className="hm-chest-in" cx="262" cy="226" r="13" />
+  <g className="hm-pill" transform="rotate(-35 70 96)">
+    <rect x="34" y="82" width="72" height="28" rx="14" className="hm-pill-a" />
+    <path d="M70 82h22a14 14 0 010 28H70z" className="hm-pill-b" />
+  </g>
+  <g className="hm-cross"><path d="M238 52h12v12h12v12h-12v12h-12V76h-12V64h12z" /></g>
+</svg>;
 
 /* ------------------------------- home -------------------------------- */
 function DemoOutput({ title, children }) {
@@ -1034,6 +1037,7 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
         <h1>Try AegisCare</h1>
         <p>Search patient reviews by hospital, doctor, or disease, then run the existing AI analysis workflow.</p>
       </div>
+      <EcgLine className="phead-ecg" />
     </header>
 
     <section className="panel" style={{ marginTop: 0, width: "100%", boxSizing: "border-box", padding: "clamp(18px,3vw,36px)" }} aria-labelledby="try-form-title">
@@ -1275,6 +1279,8 @@ function Home({ explore }) {
     <div className="hero-orb hero-orb-left" aria-hidden="true" />
     <div className="hero-orb hero-orb-right" aria-hidden="true" />
     <div className="hero-dots" aria-hidden="true" />
+    <HeroMedical />
+    <EcgLine className="hero-ecg" />
     <div className="hero-copy">
       <span className="hero-eyebrow">AI-POWERED PATIENT EXPERIENCE INTELLIGENCE</span>
       <h1>AegisCare <span>AI</span></h1>
@@ -2099,7 +2105,7 @@ function Settings({ settings, setSettings, toast }) {
       <div className="setrow"><div><h3>Organisation</h3><p>Shown on reports and in alert emails.</p></div>
         <div><div className="field"><label className="fl" htmlFor="org">Organisation name</label><input id="org" className="f" value={draft.org} onChange={e => set("org", e.target.value)} /></div>
           <div className="field"><label className="fl" htmlFor="em">Alert email</label><input id="em" type="email" className="f" placeholder="you@your-domain.com" value={draft.email} onChange={e => set("email", e.target.value)} /></div>
-          <div className="field"><div className="fl">Theme</div><div className="seg">{["system", "light", "dark"].map(t => <button key={t} className={draft.theme === t ? "on" : ""} onClick={() => set("theme", t)}>{t[0].toUpperCase() + t.slice(1)}</button>)}</div></div></div></div>
+</div></div>
       <div className="setrow"><div><h3>Review sources</h3><p>Reviews are collected from the sources you turn on.</p></div>
         <div>{Object.keys(draft.sources).map(k => <div className="tog" key={k}><span>{k}</span><Switch on={draft.sources[k]} onChange={v => src(k, v)} label={k} /></div>)}</div></div>
       <div className="setrow"><div><h3>Agents</h3><p>Control when a review is escalated and how replies are drafted.</p></div>
@@ -4957,7 +4963,7 @@ const NAV = [
   ["Account", [["settings", "Settings", "settings"]]],
 ];
 const DEFAULTS = {
-  org: "Your Hospital Group", email: "", theme: "system", threshold: 3, autoDraft: true, notifyHigh: true, weekly: false,
+  org: "Your Hospital Group", email: "", theme: "light", threshold: 3, autoDraft: true, notifyHigh: true, weekly: false,
   patientMaxResults: 8, patientTimePref: "", patientAutoCheck: true,
   api: API.baseUrl, sources: { Practo: true, "Google Maps": true, Lybrate: false, Facebook: false }
 };
@@ -5032,8 +5038,6 @@ function PatientSettings({ auth, apiBaseUrl = API.baseUrl, settings, setSettings
           <div className="tog"><span>Check hospital availability automatically<small>Looks up the hospital's website, phone and hours when you choose it. Takes up to 30 seconds.</small></span><Switch on={draft.patientAutoCheck !== false} onChange={v => set("patientAutoCheck", v)} label="Check hospital availability automatically" /></div>
         </div></div>
 
-      <div className="setrow"><div><h3>Appearance</h3><p>Choose how AegisCare looks.</p></div>
-        <div className="field"><div className="fl">Theme</div><div className="seg">{["system", "light", "dark"].map(t => segBtn("theme", t, t[0].toUpperCase() + t.slice(1)))}</div></div></div>
 
       <div className="setrow"><div><h3>Privacy and my data</h3><p>What AegisCare keeps for your account.</p></div>
         <div>
@@ -6265,6 +6269,40 @@ tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, transparent) !i
 .lp-ico { border-radius: 50% !important; background: transparent !important; border: 1px solid var(--brand); }
 .lp section h2, .lp h2 { font-family: var(--display) !important; font-weight: 400 !important; text-transform: uppercase; letter-spacing: .01em; line-height: 1; }
 
+
+/* ---------------- Medical elements (decorative, same paper / ink / wine language) ---------------- */
+/* Faint pattern of small medical crosses on the paper, under the grain */
+.app::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.3  0 0 0 0 0.22  0 0 0 0 0.18  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"), url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='88'><path d='M40 34h5v6h6v5h-6v6h-5v-6h-6v-5h6z' fill='%236e2232' fill-opacity='.035'/><path d='M84 78h3v3h3v3h-3v3h-3v-3h-3v-3h3z' fill='%23141110' fill-opacity='.03'/></svg>") !important; background-size: 160px 160px, 88px 88px; }
+
+/* Heartbeat rule under every page title (replaces the plain rule) */
+.phead { position: relative; border-bottom: 0 !important; padding-bottom: 30px !important; }
+.ecg-line { display: block; width: 100%; height: 26px; overflow: visible; }
+.ecg-line path { fill: none; stroke: var(--brand); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round;
+  stroke-dasharray: 4000; stroke-dashoffset: 4000; animation: ecgDraw 1.8s cubic-bezier(.4,.1,.2,1) .15s forwards; }
+/* non-scaling strokes measure dashes in screen pixels, so the dash is a long pixel length */
+.phead-ecg { position: absolute; left: 0; right: 0; bottom: -4px; }
+@keyframes ecgDraw { to { stroke-dashoffset: 0; } }
+
+/* Small wine medical cross before every section label */
+.n:not(.pipe .n)::before, .lp-eyebrow::before {
+  content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 8px; vertical-align: 0;
+  background: linear-gradient(var(--brand), var(--brand)) center / 100% 3px no-repeat,
+              linear-gradient(var(--brand), var(--brand)) center / 3px 100% no-repeat;
+}
+
+/* Footer: a heartbeat instead of a flat rule */
+.app-status { border-top: 0 !important; padding-top: 26px !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 24' preserveAspectRatio='none'><path d='M0 14H262l6-4 5 4h8l5-12 7 20 6-15 4 7h10l7-4 6 4H600' fill='none' stroke='%236e2232' stroke-width='1.4' vector-effect='non-scaling-stroke'/></svg>") !important; background-repeat: no-repeat !important; background-position: top center !important; background-size: 100% 22px !important; }
+
+/* Sidebar & top menu: the active item carries a tiny pulse dot */
+.sn-item.on::after { content: ""; flex: none; width: 6px; height: 6px; margin-left: auto; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 0 var(--brand); animation: medPulse 2.4s ease-out infinite; }
+@keyframes medPulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 55%, transparent); } 70%,100% { box-shadow: 0 0 0 8px transparent; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ecg-line path { animation: none; stroke-dashoffset: 0; }
+  .sn-item.on::after { animation: none; }
+}
+
 /* ---------------- Logo ---------------- */
 :root, :root[data-theme="light"] { --logo-shield: #6e2232; --logo-glyph: #f7f1e8; --logo-edge: transparent; }
 :root[data-theme="dark"] { --logo-shield: #8c2a3f; --logo-glyph: #f7f1e8; --logo-edge: rgba(208,106,126,.55); }
@@ -6277,21 +6315,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, transparent) !i
 @keyframes logoBeat { 0%,100% { stroke-dasharray: 40; stroke-dashoffset: 0; } 50% { stroke-dasharray: 40; stroke-dashoffset: 40; } }
 .auth-brand { display: inline-flex; align-items: center; gap: 12px; font-family: var(--display); text-transform: uppercase; letter-spacing: .03em; font-size: 22px; }
 
-/* ---------------- Light / dark switch ---------------- */
-.theme-toggle {
-  flex: none; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; cursor: pointer;
-  border: 1px solid var(--text); border-radius: 0; background: transparent; color: var(--text);
-  font: 700 11px/1 var(--sans); letter-spacing: .16em; text-transform: uppercase; transition: background .2s, color .2s;
-}
-.theme-toggle:hover { background: var(--text); color: var(--bg); }
-.theme-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
-.theme-toggle svg { transition: transform .5s cubic-bezier(.3,1.4,.5,1); }
-.theme-toggle:hover svg { transform: rotate(-25deg); }
-.tb-actions { justify-self: end; display: flex; align-items: center; gap: 10px; }
-.topbar.app-nav .theme-toggle { margin-left: auto; }
-.topbar.app-nav .theme-toggle + div { margin-left: 0 !important; }
-@media (max-width: 720px) { .theme-toggle-label { display: none; } .theme-toggle { padding: 0 10px; } }
-:root[data-theme] body, .app { transition: background-color .35s ease, color .35s ease; }
 
 /* Phones: logo, switch and profile share one compact row */
 @media (max-width: 560px) {
@@ -6299,7 +6322,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, transparent) !i
   .topbar .brand .logo-mark, .landing-nav .brand .logo-mark { width: 28px !important; height: 28px !important; }
   .topbar .brand { font-size: 19px !important; gap: 6px !important; }
   .topbar .brand-ai { display: none !important; }
-  .theme-toggle { height: 36px; padding: 0 8px; }
   .profile-button > span:not([aria-hidden]) { max-width: 70px !important; }
   .nav-get-started { padding: 11px 10px !important; letter-spacing: .08em !important; font-size: 10.5px !important; }
 }
@@ -6706,7 +6728,6 @@ function App() {
             <button onClick={() => setPage("contact")}>Contact</button>
           </nav>}
           <div className="tb-actions">
-            <ThemeToggle theme={settings.theme} onChange={t => setSettings(s => ({ ...s, theme: t }))} />
             {page === "home" && <button className="nav-get-started" onClick={handleExplore}>Explore the platform <span>↗</span></button>}
             {(page === "about" || page === "contact") && <button className="nav-get-started" onClick={() => setPage("home")}>Back to home <span>↗</span></button>}
             {page === "onboarding" && <button className="nav-get-started" onClick={logout}>Sign out <span>↗</span></button>}
@@ -6727,7 +6748,6 @@ function App() {
               </button>
             )}
           </nav>}
-          <ThemeToggle theme={settings.theme} onChange={t => setSettings(s => ({ ...s, theme: t }))} />
           <div ref={profileRef} style={{ position: "relative" }}>
             <button
               className="btn profile-button"

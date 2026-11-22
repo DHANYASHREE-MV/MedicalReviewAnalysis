@@ -516,7 +516,7 @@ Also add the backend's `/api/auth/google/callback` URL to the authorised redirec
 
 ### Brand
 
-The logo is a shield (*aegis*) holding an "A" whose crossbar is a heartbeat. Files are in `aegiscare/public/brand/` (light and dark versions) and `aegiscare/public/favicon.svg`. The interface uses an editorial paper, ink and wine palette with light and dark modes (switch in the header).
+The logo is a shield (*aegis*) holding an "A" whose crossbar is a heartbeat. Files are in `aegiscare/public/brand/` (light and dark versions) and `aegiscare/public/favicon.svg`. The interface uses one light editorial theme (paper, ink and wine) on every page, with medical details: a heartbeat rule under page titles and in the footer, small medical crosses on section labels and in the background, and a stethoscope illustration on the landing page.
 
 ## API Overview
 

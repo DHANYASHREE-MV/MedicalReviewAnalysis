@@ -1370,15 +1370,39 @@ body { background: var(--bg); }
   background: linear-gradient(var(--brand) 0 38%, color-mix(in srgb, var(--ink) 25%, transparent) 38%);
   animation: lhRule 1.4s cubic-bezier(.2,.8,.2,1) both;
 }
-.landing-hero::after {
-  content: "";
+/* Medical line art: stethoscope, capsule and cross, inside the wine ring */
+.hero-medical {
+  position: absolute;
+  z-index: -1;
+  right: max(7%, 40px);
+  bottom: 128px;
+  width: min(25vw, 330px);
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
+}
+.hero-medical .hm-ink { stroke: var(--ink); stroke-width: 3.2; }
+.hero-medical .hm-ink circle { fill: var(--bg); }
+.hero-medical .hm-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: hmDraw 2.2s cubic-bezier(.4,.1,.2,1) .5s forwards; }
+.hero-medical .hm-chest { fill: var(--brand); animation: lhFade .8s ease 1.9s both; }
+.hero-medical .hm-chest-in { fill: none; stroke: #f7f1e8; stroke-width: 2.4; animation: lhFade .8s ease 2s both; }
+.hero-medical .hm-pill { animation: hmFloat 5s ease-in-out 1s infinite; transform-box: fill-box; transform-origin: center; }
+.hero-medical .hm-pill-a { fill: var(--bg); stroke: var(--ink); stroke-width: 3; }
+.hero-medical .hm-pill-b { fill: var(--brand); }
+.hero-medical .hm-cross path { fill: var(--brand); }
+.hero-medical .hm-cross { transform-box: fill-box; transform-origin: center; animation: hmBeat 2.4s ease-in-out 2.2s infinite; }
+/* Heartbeat along the bottom rule of the hero */
+.hero-ecg {
   position: absolute;
   z-index: -1;
   left: clamp(48px, 9vw, 160px);
-  right: clamp(28px, 8vw, 140px);
-  bottom: 112px;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  bottom: 100px;
+  width: calc(100% - clamp(48px, 9vw, 160px) - clamp(28px, 8vw, 140px)) !important;
 }
+.hero-ecg path { stroke: var(--brand) !important; stroke-width: 1.4 !important; }
+@keyframes hmDraw { to { stroke-dashoffset: 0; } }
+@keyframes hmFloat { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-8px) rotate(4deg); } }
+@keyframes hmBeat { 0%,40%,100% { transform: scale(1); } 20% { transform: scale(1.18); } }
 .hero-copy {
   position: relative;
   z-index: 2;
@@ -1475,18 +1499,13 @@ body { background: var(--bg); }
 .hero-dots {
   position: absolute;
   z-index: -1;
-  right: 4%;
-  top: 8%;
-  width: min(40vw, 480px);
-  height: min(40vw, 480px);
-  opacity: .6;
-  background:
-    radial-gradient(circle at 12% 30%, var(--brand) 0 6px, transparent 7px),
-    radial-gradient(circle at 20% 18%, var(--brand) 0 3px, transparent 4px),
-    radial-gradient(circle at 88% 64%, var(--brand) 0 5px, transparent 6px),
-    radial-gradient(circle at 78% 82%, var(--brand) 0 2.5px, transparent 3.5px),
-    radial-gradient(circle at 8% 52%, var(--brand) 0 2px, transparent 3px),
-    radial-gradient(circle at 60% 6%, var(--brand) 0 3.5px, transparent 4.5px);
+  right: 3%;
+  top: 7%;
+  width: min(40vw, 500px);
+  height: min(40vw, 500px);
+  opacity: .75;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g fill='%236e2232'><path d='M90 22h3v3h3v3h-3v3h-3v-3h-3v-3h3z'/><path d='M74 4h2v2h2v2h-2v2h-2V8h-2V6h2z'/><path d='M94 46h2v2h2v2h-2v2h-2v-2h-2v-2h2z'/></g></svg>");
+  background-size: 100% 100%;
   pointer-events: none;
   animation: lhFade 1.2s ease .9s both;
 }
@@ -1537,7 +1556,7 @@ body { background: var(--bg); }
 @keyframes lhStain { from { opacity: 0; transform: rotate(-40deg) scale(.85); } }
 @media (prefers-reduced-motion: reduce) {
   .landing-hero::before, .hero-eyebrow, .hero-copy h1, .hero-copy p, .hero-explore, .hero-cta,
-  .hero-orb-right, .hero-orb-left, .hero-dots, .hero-features > div { animation: none !important; }
+  .hero-orb-right, .hero-orb-left, .hero-dots, .hero-features > div, .hero-medical *, .hero-ecg path { animation: none !important; stroke-dashoffset: 0 !important; }
 }
 
 @media (max-width: 760px) {
@@ -1563,6 +1582,8 @@ body { background: var(--bg); }
   .hero-orb-right { width: 62vw; right: -14%; top: 4%; }
   .hero-orb-left { display: none; }
   .hero-dots { display: none; } /* droplets would sit on the headline text on small screens */
+  .hero-medical { width: 40vw; right: 4%; bottom: 210px; opacity: .9; }
+  .hero-ecg { left: 36px; bottom: 140px; width: calc(100% - 58px) !important; }
 }
 @media (max-width: 420px) {
   .hero-features { justify-content: flex-start; width: 100%; }
