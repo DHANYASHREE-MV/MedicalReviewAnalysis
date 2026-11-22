@@ -1,0 +1,12 @@
+.git
+.github
+.maps_profile
+secret
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+!.env.example
+aegiscare/node_modules
+aegiscare/dist
+*.log

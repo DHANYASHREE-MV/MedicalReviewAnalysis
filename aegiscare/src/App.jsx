@@ -504,6 +504,44 @@ function getTotal(payload, fallback = 0) {
 
 const apiFetch = (url, opts = {}) => fetch(url, { credentials: "include", ...opts });
 
+/* ---- Sign-in token for the online site (GitHub Pages + hosted backend) ----
+   After Google sign-in the backend returns "#aegis_token=…". The token is kept in this
+   browser and sent as "Authorization: Bearer …" with every request to the AegisCare
+   backend, because browsers often block the session cookie between two different sites.
+   Locally the cookie still works as before; the token only adds a second way in. */
+const AUTH_TOKEN_KEY = "aegiscare_auth_token";
+const clearAuthToken = () => { try { localStorage.removeItem(AUTH_TOKEN_KEY); } catch (_) { } };
+(function setupAuthToken() {
+  if (typeof window === "undefined" || window.__aegisFetchPatched) return;
+  window.__aegisFetchPatched = true;
+  try {
+    const m = window.location.hash.match(/(?:^#|&)aegis_token=([^&]+)/);
+    if (m) {
+      localStorage.setItem(AUTH_TOKEN_KEY, decodeURIComponent(m[1]));
+      // Remove the token from the address bar; keep "?google_auth=success" for the existing sign-in handling.
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    }
+  } catch (_) { }
+  let apiOrigin = "";
+  try { apiOrigin = new URL(API.baseUrl).origin; } catch (_) { }
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    try {
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      if (apiOrigin && url.startsWith(apiOrigin) && init.mode !== "no-cors") {
+        const headers = new Headers(init.headers || (typeof input !== "string" && input && input.headers) || undefined);
+        let token = null;
+        try { token = localStorage.getItem(AUTH_TOKEN_KEY); } catch (_) { }
+        if (token && !headers.has("Authorization")) headers.set("Authorization", "Bearer " + token);
+        // Free ngrok tunnels show a warning page unless this header is sent.
+        if (/\.ngrok(-free)?\.(app|dev|io)$/.test(new URL(url).hostname)) headers.set("ngrok-skip-browser-warning", "1");
+        init = { ...init, headers };
+      }
+    } catch (_) { }
+    return nativeFetch(input, init);
+  };
+})();
+
 async function fetchJson(url) {
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
@@ -1240,13 +1278,30 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
 }
 
 function GoogleLogin({ apiBaseUrl = API.baseUrl, go, signedIn, email }) {
-  const startGoogleAuth = (mode) => {
+  const [checking, setChecking] = useState(false);
+  const [serverDown, setServerDown] = useState("");
+  const startGoogleAuth = async (mode) => {
     // The session cookie is set on the host that starts sign-in, and Google returns to
     // http://localhost:8000. Using 127.0.0.1 here would cause "mismatching_state".
     const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/$/, "").replace("//127.0.0.1", "//localhost");
+    // Before leaving the page, make sure the AegisCare server answers, so a stopped
+    // server shows a clear message here instead of the browser's "site can't be reached".
+    // "no-cors" only tests that the server is up; the sign-in flow itself is unchanged.
+    setServerDown(""); setChecking(true);
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      await fetch(base + "/auth/me", { mode: "no-cors", credentials: "include", cache: "no-store", signal: ctrl.signal });
+      clearTimeout(timer);
+    } catch (_) {
+      setChecking(false);
+      setServerDown(base);
+      return;
+    }
     // Google handles first-time account creation and returning-user sign-in in the same secure flow.
     window.location.href = base + "/auth/google/start?mode=" + encodeURIComponent(mode);
   };
+  const onHostedSite = typeof window !== "undefined" && !/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname) && /\/\/(localhost|127\.0\.0\.1)[:/]/.test(serverDown);
   return <section className="auth-shell">
     <div className="auth-art">
       <div className="auth-brand"><Mark size={36} /><span>AegisCare AI</span></div>
@@ -1263,9 +1318,17 @@ function GoogleLogin({ apiBaseUrl = API.baseUrl, go, signedIn, email }) {
       <h1 style={{ fontSize: 30, margin: "10px 0" }}>Sign in</h1>
       <p className="muted" style={{ lineHeight: 1.7, marginBottom: 24 }}>Continue with your Google account. New users are asked a few quick details (who they are, city, organization) before the dashboard.</p>
       {signedIn ? <><p className="chip approved" style={{ display: "inline-block", alignSelf: "center" }}>Signed in{email ? ` as ${email}` : ""}</p><div style={{ marginTop: 20 }}><button className="btn pri" onClick={() => go("dashboard")}>Go to dashboard →</button></div></> : <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 12, maxWidth: 340, margin: "0 auto", width: "100%" }}>
-        <button className="btn pri" onClick={() => startGoogleAuth("login")} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "12px 20px", minHeight: 46 }}>
-          <span aria-hidden="true" style={{ fontWeight: 700, fontSize: 18 }}>G</span> Continue with Google
+        <button className="btn pri" onClick={() => startGoogleAuth("login")} disabled={checking} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "12px 20px", minHeight: 46 }}>
+          <span aria-hidden="true" style={{ fontWeight: 700, fontSize: 18 }}>G</span> {checking ? "Connecting…" : "Continue with Google"}
         </button>
+        {serverDown && <div role="alert" style={{ marginTop: 16, padding: "12px 14px", border: "1px solid var(--crit)", textAlign: "left", lineHeight: 1.6 }}>
+          <b style={{ color: "var(--crit)" }}>The AegisCare server isn't running.</b>
+          <div className="small" style={{ marginTop: 4 }}>Sign-in needs the backend at <code>{serverDown}</code>.
+            {onHostedSite
+              ? <> This online page can only sign in once the backend is hosted on the internet. For now, start the backend on your computer and open <a href="http://localhost:5173">http://localhost:5173</a>.</>
+              : <> Start it from the project folder with <code>uvicorn api:app --reload --port 8000</code>, then press Continue with Google again.</>}
+          </div>
+        </div>}
       </div>}
       <div style={{ marginTop: 22 }}><button className="link" onClick={() => go("home")}>← Back to home</button></div>
       <p className="small muted" style={{ marginTop: 20 }}>Google is used for authentication. Google Business Profile access requires separate permission.</p>
@@ -6670,6 +6733,7 @@ function App() {
     try { await fetch(base + "/auth/logout", { method: "POST", credentials: "include" }); } catch (e) { console.warn("Logout request failed:", e); }
     setGoogleAuth(EMPTY_AUTH);
     try { localStorage.removeItem(SEARCH_HIST_KEY); } catch (e) { }
+    clearAuthToken();
     setProfileOpen(false);
     setPage("home");
     setToastMsg("Logged out");
