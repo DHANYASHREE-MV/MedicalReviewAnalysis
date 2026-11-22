@@ -79,10 +79,9 @@ app = FastAPI(title="AegisCare API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    # Local dev by default. When the frontend is hosted (e.g. GitHub Pages), add its origin in .env:
+    # CORS_ORIGINS=http://localhost:5173,https://dhanyashree-mv.github.io
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1835,8 +1834,10 @@ if not _AUTH_SESSION_SECRET:
 app.add_middleware(
     SessionMiddleware,
     secret_key=_AUTH_SESSION_SECRET or _auth_secrets.token_urlsafe(48),
-    same_site="lax",
-    https_only=False,  # Localhost development only. Set True behind HTTPS in production.
+    # Defaults suit localhost. For a frontend on another site (GitHub Pages) behind HTTPS set
+    # AUTH_COOKIE_SAMESITE=none and AUTH_HTTPS_ONLY=true in .env so the browser sends the cookie.
+    same_site=os.getenv("AUTH_COOKIE_SAMESITE", "lax").strip().lower(),
+    https_only=os.getenv("AUTH_HTTPS_ONLY", "false").strip().lower() in {"1", "true", "yes"},
 )
 
 _auth_oauth = OAuth()
