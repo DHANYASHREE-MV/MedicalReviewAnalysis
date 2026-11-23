@@ -20,7 +20,7 @@ const API = {
 const PLACEHOLDER = {
   totalReviewsMonitored: 0, // TODO: GET /reviews/count (0 = use sample data count)
   trend: [0, 0, 0, 0, 0, 0, 0], // TODO: weekly negative-review counts (all zeros = show sample series)
-  contact: { email: "hello@your-domain.com", phone: "+91 00000 00000", address: "Your address, City, Country", hours: "Monday to Friday, 9:00 to 18:00" },
+  contact: { email: "dhanyashreemv27@gmail.com" },
 };
 const TREND_LABELS = ["6w ago", "5w", "4w", "3w", "2w", "Last wk", "This wk"];
 
@@ -2226,25 +2226,56 @@ function About({ go }) {
 }
 
 /* ------------------------------ contact ------------------------------ */
-function Contact() {
-  const [f, setF] = useState({ name: "", email: "", topic: "Product demo", msg: "" }); const [sent, setSent] = useState(false);
-  const ok = f.name && /\S+@\S+\.\S+/.test(f.email) && f.msg;
-  const c = PLACEHOLDER.contact;
+const CONTACT_EMAIL = "dhanyashreemv27@gmail.com";
+const CONTACT_TOPICS = ["Product demo", "Pricing", "Technical support", "Appointments", "Account or sign-in", "Feedback", "Other"];
+function Contact({ apiBaseUrl = API.baseUrl, auth }) {
+  const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
+  const [f, setF] = useState(() => ({ name: auth?.name || "", email: auth?.email || "", topic: auth?.role === "patient" ? "Appointments" : "Product demo", msg: "" }));
+  const [state, setState] = useState({ status: "idle", text: "" }); // idle | sending | sent | saved | error
+  useEffect(() => { setF(x => ({ ...x, name: x.name || auth?.name || "", email: x.email || auth?.email || "" })); }, [auth?.name, auth?.email]);
+  const ok = f.name.trim() && /\S+@\S+\.\S+/.test(f.email) && f.msg.trim();
+  const mailto = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`[AegisCare] ${f.topic}: message from ${f.name}`)}&body=${encodeURIComponent(`${f.msg}\n\n${f.name}\n${f.email}`)}`;
+  const send = async () => {
+    if (!ok) return;
+    setState({ status: "sending", text: "" });
+    try {
+      const res = await fetch(`${base}/contact`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: f.name, email: f.email, topic: f.topic, message: f.msg }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Could not send your message (${res.status}).`);
+      setState({ status: data.emailed ? "sent" : "saved", text: data.message || "" });
+    } catch (e) {
+      setState({ status: "error", text: e.message || "Could not send your message." });
+    }
+  };
+  const reset = () => { setF(x => ({ ...x, msg: "" })); setState({ status: "idle", text: "" }); };
   return <>
-    <PageHead title="Contact us" sub="Questions, a demo, or a problem with a review? Tell us." />
+    <PageHead title="Contact us" sub="Questions, a demo, an appointment issue or a problem with a review? Write to us and we'll reply by email." />
     <div className="cols">
       <section className="panel">
-        {sent ? <div><h2 className="ph2">Message ready</h2><p className="muted" style={{ marginBottom: 14 }}>This form has no backend yet. Connect it to your API or email service to deliver messages.</p><button className="btn" onClick={() => setSent(false)}>Write another</button></div> : <>
-          <div className="field"><label className="fl" htmlFor="n">Name</label><input id="n" className="f" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
-          <div className="field"><label className="fl" htmlFor="e">Email</label><input id="e" type="email" className="f" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></div>
-          <div className="field"><label className="fl" htmlFor="t">Topic</label><select id="t" className="f" value={f.topic} onChange={e => setF({ ...f, topic: e.target.value })}><option>Product demo</option><option>Pricing</option><option>Technical support</option><option>Partnership</option></select></div>
-          <div className="field"><label className="fl" htmlFor="m">Message</label><textarea id="m" className="f" rows="5" value={f.msg} onChange={e => setF({ ...f, msg: e.target.value })} /></div>
-          <button className="btn pri" disabled={!ok} onClick={() => setSent(true)}>Send message</button></>}
+        {state.status === "sent" ? <div role="status">
+          <p className="n">MESSAGE SENT</p><h2 className="ph2">Thank you, {f.name.split(" ")[0] || "there"}</h2>
+          <p className="muted" style={{ margin: "8px 0 16px", lineHeight: 1.6 }}>Your message reached our team at {CONTACT_EMAIL}. We'll reply to <b>{f.email}</b>.</p>
+          <button className="btn" onClick={reset}>Write another message</button>
+        </div> : state.status === "saved" ? <div role="status">
+          <p className="n">MESSAGE SAVED</p><h2 className="ph2">We have your message</h2>
+          <p className="muted" style={{ margin: "8px 0 16px", lineHeight: 1.6 }}>{state.text} To make sure it reaches us right away, you can also send it from your own email app.</p>
+          <div className="row"><a className="btn pri" href={mailto}>Send with my email app</a><button className="btn" onClick={reset}>Write another message</button></div>
+        </div> : <>
+          <p className="n">SEND A MESSAGE</p>
+          <div className="field"><label className="fl" htmlFor="ct-name">Name</label><input id="ct-name" className="f" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} autoComplete="name" /></div>
+          <div className="field"><label className="fl" htmlFor="ct-email">Email</label><input id="ct-email" type="email" className="f" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} autoComplete="email" /></div>
+          <div className="field"><label className="fl" htmlFor="ct-topic">Topic</label><select id="ct-topic" className="f" value={f.topic} onChange={e => setF({ ...f, topic: e.target.value })}>{CONTACT_TOPICS.map(t => <option key={t}>{t}</option>)}</select></div>
+          <div className="field"><label className="fl" htmlFor="ct-msg">Message</label><textarea id="ct-msg" className="f" rows="6" maxLength={5000} value={f.msg} onChange={e => setF({ ...f, msg: e.target.value })} placeholder="How can we help?" /></div>
+          {state.status === "error" && <p role="alert" style={{ color: "var(--crit)", margin: "0 0 12px" }}>{state.text} You can also <a href={mailto}>email us directly</a>.</p>}
+          <button className="btn pri" disabled={!ok || state.status === "sending"} onClick={send}>{state.status === "sending" ? "Sending…" : "Send message"}</button>
+        </>}
       </section>
       <section className="panel">
-        <h2 className="ph2">Details</h2>
-        {[["Email", c.email], ["Phone", c.phone], ["Address", c.address], ["Hours", c.hours]].map(([l, v]) => <div key={l} className="rowline"><span className="muted">{l}</span><b style={{ textAlign: "right" }}>{v}</b></div>)}
-        <p className="small muted" style={{ marginTop: 14 }}>Placeholder details. Edit them in PLACEHOLDER.contact.</p>
+        <p className="n">DETAILS</p><h2 className="ph2">Reach the AegisCare team</h2>
+        <div className="rowline"><span className="muted">Email</span><b style={{ textAlign: "right" }}><a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></b></div>
+        <div className="rowline"><span className="muted">Reply time</span><b style={{ textAlign: "right" }}>Usually within 2 working days</b></div>
+        <div className="rowline"><span className="muted">For</span><b style={{ textAlign: "right" }}>Patients, doctors and hospitals</b></div>
+        <p className="small muted" style={{ marginTop: 14, lineHeight: 1.6 }}>Please don't include medical reports or your ABHA number in messages. For a medical emergency, call 112.</p>
       </section>
     </div>
   </>;
@@ -3449,7 +3480,6 @@ function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefi
             : <EmptyArt kind="calendar" title="No appointment requests yet" text="Choose a hospital from Find care to send your first request." />}
       </section>
     </div>
-    <PrepTips topic={bestPrepTopic(form.specialty, hospital?.name)} />
   </div>;
 }
 
@@ -3733,7 +3763,7 @@ function SpecialtyCare({ spec, city, base, chooseHospital, go }) {
       <div className="sc-float" aria-hidden="true"><Gl n={SPEC_ICON[spec] || "steth"} /></div>
     </div>
 
-    {!city && <p className="small muted" style={{ marginTop: 14 }}>Add your care location in Settings to see places near you. <button className="btn" onClick={() => go("settings")}>Open settings</button></p>}
+    {!city && <p className="small muted" style={{ marginTop: 14 }}>Add your city to see places near you. <button className="btn" onClick={() => { const el = document.getElementById("care-profile"); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => document.getElementById("pg-city")?.focus(), 400); } else go("settings"); }}>Add my city</button></p>}
 
     {city && <>
       <div className="sc-title"><h3><Gl n="trophy" /> Popular near you</h3><span className="small muted">Ranked by rating and how many people rated</span></div>
@@ -4124,7 +4154,7 @@ const WEEKLY_PERKS = [
 // Monday of the current week as YYYY-MM-DD; the perk set resets when this changes.
 const perkWeekKey = (d = new Date()) => dkey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)));
 
-function CareProfileCard({ auth, apiBaseUrl = API.baseUrl, go, onProfileSaved }) {
+function CareProfileCard({ auth, apiBaseUrl = API.baseUrl, go, onProfileSaved, compact = false }) {
   const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
   const [city, setCity] = useState(auth?.profile?.city || "");
   const [usual, setUsual] = useState(auth?.profile?.specialty || "");
@@ -4143,6 +4173,24 @@ function CareProfileCard({ auth, apiBaseUrl = API.baseUrl, go, onProfileSaved })
     finally { setBusy(false); }
   };
 
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { if (!busy && !err) return; setSaved(false); }, [busy, err]);
+  if (compact) return <section className="panel glow-profile" id="care-profile" aria-label="Your care profile">
+    <p className="n">YOUR CARE PROFILE</p>
+    <h2 className="ph2" style={{ margin: "4px 0 6px" }}>Where & what you need</h2>
+    <p className="muted small" style={{ margin: "0 0 12px" }}>Used to find care near you and pre-fill appointment requests.</p>
+    <div className="glow-profile-fields">
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="pg-city">City or area</label>
+        <input id="pg-city" className="f" value={city} onChange={e => { setCity(e.target.value); setSaved(false); }} placeholder="e.g. Kochi" /></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="pg-spec">Usual type of care</label>
+        <select id="pg-spec" className="f" value={usual} onChange={e => { setUsual(e.target.value); setSaved(false); }}>
+          <option value="">No preference</option>{PATIENT_CARE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select></div>
+    </div>
+    {err && <p role="alert" style={{ color: "var(--crit)", margin: "10px 0 0" }}>{err}</p>}
+    {saved && !err && <p role="status" className="small" style={{ color: "var(--ok)", margin: "10px 0 0" }}>Saved.</p>}
+    <div className="row" style={{ marginTop: 14 }}><button className="btn pri" onClick={async () => { await saveProfile(); setSaved(true); }} disabled={busy}>{busy ? "Saving…" : "Save"}</button><button className="btn" onClick={() => go && go("onboarding")}>Edit full profile</button></div>
+  </section>;
   return <section className="panel" style={{ marginBottom: 20 }} aria-label="Your care profile">
     <p className="n">YOUR CARE PROFILE</p>
     <h2 className="ph2" style={{ margin: "4px 0 6px" }}>Where and what you usually need</h2>
@@ -4244,27 +4292,56 @@ function WeeklyPerks({ auth }) {
 
 function PatientGlow({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, onProfileSaved, onAbhaChange }) {
   const base = String(apiBaseUrl || API.baseUrl).trim().replace(/\/+$/, "");
-  const stored = (() => { try { return JSON.parse(sessionStorage.getItem("aegiscare_care_search") || "null") || {}; } catch (_) { return {}; } })();
-  const prepTopic = stored.prepTopic || "";
   const city = auth?.profile?.city || "";
   const spec = auth?.profile?.specialty || "";
+  const [appts, setAppts] = useState(null);
+  useEffect(() => { apiFetch(`${base}/appointments`).then(r => r.ok ? r.json() : { items: [] }).then(d => setAppts(d.items || [])).catch(() => setAppts([])); }, [base]);
+  const today = new Date().toISOString().slice(0, 10);
+  const next = (appts || []).filter(a => ["pending", "confirmed", "requested"].includes(String(a.status || "").toLowerCase()) && String(a.appointment_date).slice(0, 10) >= today)
+    .sort((a, b) => (String(a.appointment_date) + a.appointment_time).localeCompare(String(b.appointment_date) + b.appointment_time))[0];
+  const lastDone = (appts || []).find(a => String(a.status || "").toLowerCase() === "completed");
   const chooseHospital = (h) => {
     const prefill = { provider_name: h.name, specialty: (h.specialties && h.specialties[0]) || "", maps_url: h.mapsUrl || "", city };
     if (onChooseProvider) onChooseProvider(prefill); else go("patient-appointments");
   };
+  const openPrepare = () => { try { sessionStorage.setItem("aegiscare_act_tab", "prepare"); } catch (_) { } go("patient-activities"); };
+  const days = next ? Math.round((new Date(String(next.appointment_date).slice(0, 10) + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000) : null;
   return <div className="page">
-    <PageHead title="Prep & Perk" sub="Pick up daily health tips, keep your habit streak going and get ready for your visit." />
-    <CareProfileCard auth={auth} apiBaseUrl={apiBaseUrl} go={go} onProfileSaved={onProfileSaved} />
-    <WeeklyPerks auth={auth} />
-    <SpecialtyCare key={spec + "|" + city} spec={spec} city={city} base={base} chooseHospital={chooseHospital} go={go} />
-    {prepTopic
-      ? <PrepTips topic={prepTopic} />
-      : <section className="panel" style={{ marginBottom: 20 }}>
-        <p className="n">BEFORE YOUR APPOINTMENT</p>
-        <h2 className="ph2">Your prep checklist appears after a care search</h2>
-        <p className="muted" style={{ margin: "8px 0 14px" }}>Describe how you feel in My care and we will build a checklist of things to follow, what to bring and questions to ask.</p>
-        <button className="btn pri" onClick={() => go("patient-dashboard")}>Find care</button>
-      </section>}
+    <PageHead title="Prep & Perk" sub="Get ready for your next visit and see care that suits you." />
+
+    <div className="glow-top">
+      <section className="panel glow-visit" aria-label="Your next visit">
+        <p className="n">YOUR NEXT VISIT</p>
+        {appts === null ? <p className="muted small">Loading…</p>
+          : next ? <>
+            <div className="glow-visit-row">
+              <div className="glow-date" aria-hidden="true">
+                <b>{new Date(String(next.appointment_date).slice(0, 10) + "T00:00:00").toLocaleDateString([], { day: "2-digit" })}</b>
+                <span>{new Date(String(next.appointment_date).slice(0, 10) + "T00:00:00").toLocaleDateString([], { month: "short" })}</span>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <h2 className="ph2" style={{ margin: "0 0 4px" }}>{next.doctor_name || next.provider_name}</h2>
+                <p className="muted small" style={{ margin: 0 }}>{fmtDate(next.appointment_date)} at {next.appointment_time} · {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}</p>
+                {next.reason && <p className="small" style={{ margin: "6px 0 0" }}>{next.reason}</p>}
+                <div style={{ marginTop: 8 }}><StatusChip s={next.status} /></div>
+              </div>
+            </div>
+            <div className="row" style={{ marginTop: 16 }}>
+              <button className="btn pri" onClick={openPrepare}>Prepare for this visit</button>
+              <button className="btn" onClick={() => go("patient-appointments")}>All appointments</button>
+            </div>
+          </> : <>
+            <h2 className="ph2" style={{ margin: "4px 0 6px" }}>No upcoming visit</h2>
+            <p className="muted small" style={{ margin: "0 0 14px" }}>{lastDone ? `Your last visit was with ${lastDone.doctor_name || lastDone.provider_name} on ${fmtDate(lastDone.appointment_date)}.` : "When you book an appointment, it shows up here with a checklist to get ready."}</p>
+            <div className="row"><button className="btn pri" onClick={() => go("patient-appointments")}>Book an appointment</button><button className="btn" onClick={openPrepare}>Open visit checklist</button></div>
+          </>}
+      </section>
+      <CareProfileCard auth={auth} apiBaseUrl={apiBaseUrl} go={go} onProfileSaved={onProfileSaved} compact />
+    </div>
+
+    <section className="panel glow-popular">
+      <SpecialtyCare key={spec + "|" + city} spec={spec} city={city} base={base} chooseHospital={chooseHospital} go={go} />
+    </section>
   </div>;
 }
 
@@ -4746,7 +4823,8 @@ function MedicineList({ uid }) {
   </section>;
 }
 
-const ACT_TABS = [["track", "Track", "heart"], ["learn", "Learn", "bulb"], ["prepare", "Prepare", "clipboard"]];
+// Track (mood & body check-in) was removed from the patient Activities page; Learn and Prepare remain.
+const ACT_TABS = [["learn", "Learn", "bulb"], ["prepare", "Prepare", "clipboard"]];
 const PREP_STEPS = ["Reason", "Prepare", "Notes", "Summary"];
 
 function CheckList({ items, prefix, checked, onToggle }) {
@@ -4876,7 +4954,10 @@ function PatientActivities({ auth, go, apiBaseUrl }) {
   const uid = (auth && (auth.email || auth.id || auth.sub)) || "guest";
   const stored = (() => { try { return JSON.parse(sessionStorage.getItem("aegiscare_care_search") || "null") || {}; } catch (_) { return {}; } })();
   const startTopic = stored.prepTopic && PREP_GUIDE[stored.prepTopic] ? stored.prepTopic : "";
-  const [tab, setTab] = useState("track");
+  const [tab, setTab] = useState(() => {
+    try { const t = sessionStorage.getItem("aegiscare_act_tab"); sessionStorage.removeItem("aegiscare_act_tab"); if (t === "learn" || t === "prepare") return t; } catch (_) { }
+    return "learn";
+  });
   const [trackView, setTrackView] = useState("checkin");
   const [learnView, setLearnView] = useState("quiz");
 
@@ -6409,6 +6490,20 @@ tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, transparent) !i
 .mycare-pair > * { min-width: 0; }
 .mycare-abha > section { margin: 0 !important; height: 100%; box-sizing: border-box; }
 
+/* ---------------- Prep & Perk layout ---------------- */
+.glow-top { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; margin-bottom: 20px; align-items: stretch; }
+.glow-top > .panel { margin: 0 !important; }
+.glow-visit-row { display: flex; gap: 18px; align-items: flex-start; margin-top: 10px; }
+.glow-date { flex: none; width: 74px; text-align: center; border: 1px solid var(--line); border-top: 4px solid var(--brand); background: var(--bg); padding: 8px 0 10px; }
+.glow-date b { display: block; font-family: var(--display); font-weight: 400; font-size: 38px; line-height: 1; color: var(--brand); }
+.glow-date span { display: block; margin-top: 4px; font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.glow-profile-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.glow-popular { margin-bottom: 20px; }
+.glow-popular .sc-title { margin-top: 0 !important; }
+.pk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+@media (max-width: 980px) { .glow-top { grid-template-columns: minmax(0, 1fr); } .pk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+@media (max-width: 560px) { .glow-profile-fields, .pk-grid { grid-template-columns: minmax(0, 1fr) !important; } }
+
 /* Phones: logo, switch and profile share one compact row */
 @media (max-width: 560px) {
   .topbar, .topbar.app-nav, .topbar.landing-nav { gap: 8px !important; padding-left: 14px !important; padding-right: 14px !important; }
@@ -6804,7 +6899,7 @@ function App() {
     action: <Action reviews={reviews} open={open} actionPlans={actionPlans} pipelineStats={pipelineStats} />, approval: <Approval reviews={reviews} setStatus={setStatus} onDelete={deleteRejectedReview} open={open} toast={setToastMsg} />,
     reports: <Reports reviews={reviews} />, "my-patients": googleAuth.role === "doctor" ? <DoctorAppointments apiBaseUrl={settings.api} onHprChange={setHprFlag} /> : dashboardView, settings: googleAuth.role === "patient"
       ? <PatientSettings auth={googleAuth} apiBaseUrl={settings.api} settings={settings} setSettings={setSettings} toast={setToastMsg} go={setPage} onLogout={logout} onProfileSaved={d => { setGoogleAuth(mapAuth(d)); setToastMsg("Profile saved"); }} />
-      : <Settings settings={settings} setSettings={setSettings} toast={setToastMsg} />, about: <About go={setPage} />, contact: <Contact />,
+      : <Settings settings={settings} setSettings={setSettings} toast={setToastMsg} />, about: <About go={setPage} />, contact: <Contact apiBaseUrl={settings.api} auth={googleAuth} />,
   }[page];
 
   return <>
