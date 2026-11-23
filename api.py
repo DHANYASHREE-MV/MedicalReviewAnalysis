@@ -438,6 +438,106 @@ def _send_via_brevo(recipient: str, subject: str, body: str, sender: str):
         raise HTTPException(status_code=502, detail=f"Email delivery failed: {r.status_code} {r.text[:300]}")
 
 
+# ============================================================
+# CONTACT US (patients, doctors, organisations and visitors)
+#   Every message is saved in aegiscare_contact_messages, then emailed to
+#   CONTACT_TO_EMAIL through Brevo (BREVO_API_KEY + SMTP_FROM), with the
+#   sender's address as reply-to. If email is not configured the message is
+#   still saved and the page offers to send it from the user's email app.
+# ============================================================
+CONTACT_TO_EMAIL = os.getenv("CONTACT_TO_EMAIL", "dhanyashreemv27@gmail.com").strip()
+CONTACT_TOPICS = ("Product demo", "Pricing", "Technical support", "Appointments", "Account or sign-in", "Feedback", "Other")
+_CONTACT_RATE = {}            # client ip -> [timestamps]; small in-memory limit against spam
+_CONTACT_LIMIT, _CONTACT_WINDOW = 5, 600
+
+
+def _ensure_contact_table():
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_contact_messages (
+                id BIGSERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                topic TEXT,
+                message TEXT NOT NULL,
+                role TEXT,
+                google_sub TEXT,
+                emailed BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+
+
+_ensure_contact_table = _run_once(_ensure_contact_table)
+from starlette.requests import Request as _ContactRequest  # defined here because fastapi.Request is imported further down
+
+
+@app.post("/api/contact")
+def send_contact_message(payload: dict, request: _ContactRequest):
+    name = str(payload.get("name") or "").strip()[:120]
+    email = str(payload.get("email") or "").strip()[:200]
+    topic = str(payload.get("topic") or "Other").strip()
+    message = str(payload.get("message") or "").strip()[:5000]
+    if not name or not message:
+        raise HTTPException(status_code=400, detail="Please enter your name and a message.")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address so we can reply.")
+    if topic not in CONTACT_TOPICS:
+        topic = "Other"
+
+    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown"))
+    now = datetime.utcnow().timestamp()
+    recent = [t for t in _CONTACT_RATE.get(ip, []) if now - t < _CONTACT_WINDOW]
+    if len(recent) >= _CONTACT_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many messages in a short time. Please try again in a few minutes.")
+    _CONTACT_RATE[ip] = recent + [now]
+
+    google_sub = request.session.get("google_sub") if "session" in request.scope else None
+    role = None
+    if google_sub:
+        try:
+            role = _profile_for_sub(google_sub).get("role")
+        except Exception:
+            role = None
+
+    _ensure_contact_table()
+    with engine.begin() as conn:
+        msg_id = conn.execute(text("""
+            INSERT INTO aegiscare_contact_messages (name, email, topic, message, role, google_sub)
+            VALUES (:name, :email, :topic, :message, :role, :sub) RETURNING id
+        """), {"name": name, "email": email, "topic": topic, "message": message, "role": role, "sub": google_sub}).scalar_one()
+
+    api_key = os.getenv("BREVO_API_KEY", "").strip()
+    sender = os.getenv("SMTP_FROM", "").strip()
+    if not api_key or not sender:
+        return {"saved": True, "emailed": False, "to": CONTACT_TO_EMAIL,
+                "message": "Your message was saved. Email delivery is not set up on the server yet."}
+    body = (f"New message from the AegisCare contact form\n\n"
+            f"Name: {name}\nEmail: {email}\nTopic: {topic}\nAccount role: {role or 'not signed in'}\n\n{message}\n")
+    try:
+        r = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": api_key, "accept": "application/json", "content-type": "application/json"},
+            json={"sender": {"email": sender, "name": "AegisCare contact form"},
+                  "to": [{"email": CONTACT_TO_EMAIL}],
+                  "replyTo": {"email": email, "name": name},
+                  "subject": f"[AegisCare] {topic}: message from {name}",
+                  "textContent": body},
+            timeout=25,
+        )
+        emailed = r.status_code < 300
+        if not emailed:
+            print(f"Contact email failed: {r.status_code} {r.text[:300]}")
+    except requests.RequestException as exc:
+        print(f"Contact email failed: {exc}")
+        emailed = False
+    if emailed:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE aegiscare_contact_messages SET emailed=TRUE WHERE id=:id"), {"id": msg_id})
+    return {"saved": True, "emailed": emailed, "to": CONTACT_TO_EMAIL,
+            "message": "Thank you. Your message has been sent." if emailed else "Your message was saved, but the email could not be sent right now."}
+
+
 @app.post("/api/reviews/{review_id}/send-approval-email")
 def send_approval_email(review_id: int, payload: dict):
     """Send an approved plan by SMTP; requires explicit UI action and SMTP .env settings."""
