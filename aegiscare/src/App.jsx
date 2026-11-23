@@ -4307,7 +4307,7 @@ function PatientGlow({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, onP
   const openPrepare = () => { try { sessionStorage.setItem("aegiscare_act_tab", "prepare"); } catch (_) { } go("patient-activities"); };
   const days = next ? Math.round((new Date(String(next.appointment_date).slice(0, 10) + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000) : null;
   return <div className="page">
-    <PageHead title="Prep & Perk" sub="Get ready for your next visit, pick up a few healthy habits, and see care that suits you." />
+    <PageHead title="Prep & Perk" sub="Get ready for your next visit and see care that suits you." />
 
     <div className="glow-top">
       <section className="panel glow-visit" aria-label="Your next visit">
@@ -4338,8 +4338,6 @@ function PatientGlow({ auth, apiBaseUrl = API.baseUrl, go, onChooseProvider, onP
       </section>
       <CareProfileCard auth={auth} apiBaseUrl={apiBaseUrl} go={go} onProfileSaved={onProfileSaved} compact />
     </div>
-
-    <WeeklyPerks auth={auth} />
 
     <section className="panel glow-popular">
       <SpecialtyCare key={spec + "|" + city} spec={spec} city={city} base={base} chooseHospital={chooseHospital} go={go} />
