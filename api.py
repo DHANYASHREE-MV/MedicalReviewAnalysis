@@ -3387,8 +3387,24 @@ def _twilio_configured():
     return all(os.getenv(k, "").strip() for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"))
 
 
+TWILIO_TRIAL_TEMPLATE = os.getenv("TWILIO_TRIAL_TEMPLATE", "sms_appointment_reminders").strip()
+
+
 def _send_twilio_sms(number: str, content: str):
-    """Twilio Programmable SMS. `number` is digits with country code."""
+    """Twilio Programmable SMS. `number` is digits with country code.
+    Trial accounts may only send Twilio's predefined templates (error 572006); in that
+    case the message is resent as TWILIO_TRIAL_TEMPLATE. Returns "twilio" or "twilio-trial-template"."""
+    try:
+        _twilio_post(number, content)
+        return "twilio"
+    except RuntimeError as exc:
+        if "572006" not in str(exc) or not TWILIO_TRIAL_TEMPLATE:
+            raise
+    _twilio_post(number, TWILIO_TRIAL_TEMPLATE)
+    return "twilio-trial-template"
+
+
+def _twilio_post(number: str, content: str):
     sid = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
     token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
     sender = os.getenv("TWILIO_FROM_NUMBER", "").strip()
@@ -3410,8 +3426,7 @@ def _send_twilio_sms(number: str, content: str):
 def _send_sms(number: str, content: str):
     """Twilio when TWILIO_* are set, otherwise Brevo SMS. Returns the provider name."""
     if _twilio_configured():
-        _send_twilio_sms(number, content)
-        return "twilio"
+        return _send_twilio_sms(number, content)
     _send_brevo_sms(number, content)
     return "brevo"
 
