@@ -3368,6 +3368,39 @@ def _mask(value, keep=3):
     return ("*" * max(len(v) - keep, 0)) + v[-keep:]
 
 
+def _twilio_configured():
+    return all(os.getenv(k, "").strip() for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"))
+
+
+def _send_twilio_sms(number: str, content: str):
+    """Twilio Programmable SMS. `number` is digits with country code."""
+    sid = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    sender = os.getenv("TWILIO_FROM_NUMBER", "").strip()
+    r = requests.post(
+        f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
+        auth=(sid, token),
+        data={"To": "+" + number, "From": sender, "Body": content},
+        timeout=25,
+    )
+    if r.status_code >= 300:
+        try:
+            info = r.json()
+            detail = f"{info.get('code', '')} {info.get('message', '')}".strip()
+        except ValueError:
+            detail = r.text[:200]
+        raise RuntimeError(f"Twilio SMS {r.status_code}: {detail[:200]}")
+
+
+def _send_sms(number: str, content: str):
+    """Twilio when TWILIO_* are set, otherwise Brevo SMS. Returns the provider name."""
+    if _twilio_configured():
+        _send_twilio_sms(number, content)
+        return "twilio"
+    _send_brevo_sms(number, content)
+    return "brevo"
+
+
 def _send_brevo_sms(number: str, content: str):
     api_key = os.getenv("BREVO_API_KEY", "").strip()
     if not api_key:
@@ -3431,8 +3464,8 @@ def _notify_patient_confirmation(appt, patient_sub):
             sms += " Bring: " + " ".join(str(appt["documents_to_bring"]).split())[:120] + "."
         sms += " Details in your email and the AegisCare app."
         try:
-            _send_brevo_sms(number, sms[:459])
-            report["sms"] = {"sent": True, "to": _mask(number)}
+            provider = _send_sms(number, sms[:459])
+            report["sms"] = {"sent": True, "to": _mask(number), "via": provider}
         except Exception as exc:  # network or provider error; confirmation still stands
             report["sms"] = {"sent": False, "to": _mask(number), "error": str(exc)[:200]}
     return report
