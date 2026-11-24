@@ -5232,6 +5232,7 @@ function DoctorHome({ apiBaseUrl, auth, go, onHprChange }) {
       <button className="btn" onClick={() => go("doctor-profile")}>Manage my profile</button>
     </PageHead>
     <DemoNotice on={s.show_demo} base={base} onChange={load} />
+    {s.identity && s.identity.claim_status !== "approved" && <div style={{ marginBottom: 16 }}><ClaimStatus identity={s.identity} compact /></div>}
     <div className="panel kpis">
       <div className="kpi"><div className="l">Average rating</div><div className="v">{s.rating ?? "—"}<span className="small muted"> / 5</span></div><div className="d"><StarRow v={s.rating} /></div></div>
       <div className="kpi"><div className="l">Reviews about you</div><div className="v"><KpiVal v={s.review_count} /></div><div className="d">{pct("positive")}% positive · {pct("negative")}% negative</div></div>
@@ -5249,6 +5250,8 @@ function DoctorHome({ apiBaseUrl, auth, go, onHprChange }) {
           : <p className="small muted">No negative themes yet.</p>}
         <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: "wrap" }}><button className="btn pri" onClick={() => go("doctor-inbox")}>Complaints & queries</button><button className="btn" onClick={() => go("doctor-reviews")}>All my reviews</button></div></section>
     </div>
+    <WeekdayPanel w={s.weekdays} />
+    <ReasonsPanel r={s.reasons} />
     <DoctorQueueCard apiBaseUrl={apiBaseUrl} go={go} />
     <section className="panel" style={{ marginTop: 0 }}>
       <div className="row" style={{ justifyContent: "space-between" }}><p className="n" style={{ margin: 0 }}>LATEST REVIEWS ABOUT YOU</p><button className="btn" onClick={() => go("doctor-reviews")}>View all</button></div>
@@ -5259,19 +5262,79 @@ function DoctorHome({ apiBaseUrl, auth, go, onHprChange }) {
   </>;
 }
 
+const CLAIM_TEXT = {
+  pending: ["pending", "Waiting for approval", "Your organisation must approve these names and clinics before your real reviews appear. Demo data stays visible meanwhile."],
+  approved: ["approved", "Approved", "Your organisation approved these names and clinics. Matching reviews appear in My reviews."],
+  rejected: ["rejected", "Not approved", "Your organisation did not approve the latest change. Edit and save to send it again."],
+};
+function ClaimStatus({ identity, compact = false }) {
+  const [tone, label, text] = CLAIM_TEXT[identity?.claim_status] || CLAIM_TEXT.pending;
+  const approved = identity?.approved_names || [];
+  return <div className={"dp-claim " + tone} role="status">
+    <span className={"chip " + tone}>{label}</span>
+    <span className="small">{text}{identity?.claim_note ? <> <b>Note:</b> {identity.claim_note}</> : null}</span>
+    {!compact && approved.length > 0 && identity.claim_status !== "approved" && <span className="small muted">Currently matching: {approved.join(", ")}{(identity.approved_clinics || []).length ? ` · ${identity.approved_clinics.join(", ")}` : ""}</span>}
+    {!compact && (identity?.pending_added || []).length > 0 && <span className="small muted">{identity.pending_added.length} added review{identity.pending_added.length === 1 ? "" : "s"} waiting for approval.</span>}
+  </div>;
+}
+
+function WeekdayPanel({ w }) {
+  const days = w?.days || [];
+  const [sel, setSel] = useState(null);
+  const max = Math.max(1, ...days.map(d => d.total));
+  const busiest = [...days].sort((a, b) => b.total - a.total)[0];
+  const worst = [...days].filter(d => d.negative).sort((a, b) => b.negative - a.negative)[0];
+  const pick = sel != null ? days[sel] : (worst || busiest);
+  if (!days.length) return null;
+  return <section className="panel" style={{ marginTop: 16 }}>
+    <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+      <p className="n" style={{ margin: 0 }}>WHICH DAY PATIENTS LEAVE REVIEWS</p>
+      <span className="small muted">{busiest?.total ? `Most reviews on ${busiest.day}` : ""}{worst ? ` · most negative on ${worst.day}` : ""}</span>
+    </div>
+    <div className="dp-week">
+      {days.map((d, i) => <button key={d.day} type="button" className={"dp-wday" + (pick === d ? " on" : "")} onClick={() => setSel(i)} aria-pressed={pick === d} title={`${d.day}: ${d.positive} positive, ${d.neutral} neutral, ${d.negative} negative`}>
+        <div className="dp-wbar"><div className="dp-stack" style={{ height: `${(d.total / max) * 100}%` }}>
+          {d.negative > 0 && <i className="neg" style={{ flex: d.negative }} />}{d.neutral > 0 && <i className="neu" style={{ flex: d.neutral }} />}{d.positive > 0 && <i className="pos" style={{ flex: d.positive }} />}
+        </div></div>
+        <b className="small">{d.total}</b><span className="small muted">{d.day.slice(0, 3)}</span>
+      </button>)}
+    </div>
+    {pick && <div className="dp-dayreasons">
+      <p className="small" style={{ margin: "0 0 8px" }}><b>{pick.day}</b> · {pick.total} review{pick.total === 1 ? "" : "s"} ({pick.positive} positive, {pick.neutral} neutral, {pick.negative} negative). Reasons:</p>
+      {pick.reasons.length ? <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{pick.reasons.map(r => <span key={r.category} className="chip" title={`${r.positive} positive · ${r.neutral} neutral · ${r.negative} negative`}>{r.category}: {r.positive ? `${r.positive}↑ ` : ""}{r.negative ? `${r.negative}↓` : ""}{!r.positive && !r.negative ? r.neutral : ""}</span>)}</div> : <span className="small muted">No reviews on this day.</span>}
+    </div>}
+    <p className="small muted" style={{ margin: "10px 0 0" }}>Tap a day to see its reasons. ↑ positive, ↓ negative.{w.undated ? ` ${w.undated} review${w.undated === 1 ? " has" : "s have"} no exact date and ${w.undated === 1 ? "is" : "are"} not counted.` : ""}</p>
+  </section>;
+}
+
+function ReasonsPanel({ r }) {
+  if (!r) return null;
+  const col = (title, list, tone) => <div>
+    <p className="n" style={{ margin: 0 }}>{title}</p>
+    {list.length ? <div style={{ display: "grid", gap: 10, marginTop: 12 }}>{list.map(c => <div key={c.category}>
+      <div className="row" style={{ justifyContent: "space-between" }}><span>{c.category}</span><b>{c.count}</b></div>
+      <div className={"dp-bar " + tone}><i style={{ width: `${(c.count / list[0].count) * 100}%` }} /></div></div>)}</div> : <p className="small muted">None yet.</p>}
+  </div>;
+  return <section className="panel grid2" style={{ gap: 20, marginTop: 16 }}>
+    {col("WHY PATIENTS PRAISE YOU", r.positive, "pos")}
+    {col("WHY PATIENTS COMPLAIN", r.negative, "neg")}
+  </section>;
+}
+
 function MatchSettings({ base, identity, onSaved }) {
   const [names, setNames] = useState((identity.name_variants || []).join("\n"));
   const [clinics, setClinics] = useState((identity.clinics || []).join("\n"));
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const save = async () => { setBusy(true); setMsg(""); try { await sendJson(`${base}/doctor/me/identity`, "PUT", { name_variants: splitLines(names), clinics: splitLines(clinics) }, "Could not save"); setMsg("Saved. Reviews re-matched."); onSaved && onSaved(); } catch (e) { setMsg(e.message); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); setMsg(""); try { await sendJson(`${base}/doctor/me/identity`, "PUT", { name_variants: splitLines(names), clinics: splitLines(clinics) }, "Could not save"); setMsg("Saved. Sent to your organisation for approval."); onSaved && onSaved(); } catch (e) { setMsg(e.message); } finally { setBusy(false); } };
   return <div style={{ display: "grid", gap: 12 }}>
-    <p className="small muted" style={{ margin: 0 }}>Reviews whose doctor name matches one of these names are yours. Reviews of these clinics that mention your name also count. Use <b>Not me</b> on any wrong match.</p>
+    <ClaimStatus identity={identity} />
+    <p className="small muted" style={{ margin: 0 }}>Reviews whose doctor name matches one of these names are yours. Reviews of these clinics that mention your name also count. Changes are approved by your organisation. Use <b>Not me</b> on any wrong match.</p>
     <div className="grid2" style={{ gap: 12 }}>
       <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="mt-names">Names you are reviewed under (one per line)</label><textarea id="mt-names" className="f" rows="3" value={names} onChange={e => setNames(e.target.value)} placeholder={"Dr. Meera Rao\nMeera Rao"} /></div>
       <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="mt-clinics">Clinics / hospitals (one per line)</label><textarea id="mt-clinics" className="f" rows="3" value={clinics} onChange={e => setClinics(e.target.value)} placeholder="City Hospital" /></div>
     </div>
-    <div className="row" style={{ gap: 8 }}><button className="btn pri" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save & re-match"}</button>{msg && <span role="status" className="small" style={{ color: msg.startsWith("Saved") ? "var(--ok)" : "var(--crit)" }}>{msg}</span>}</div>
+    <div className="row" style={{ gap: 8 }}><button className="btn pri" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save & send for approval"}</button>{msg && <span role="status" className="small" style={{ color: msg.startsWith("Saved") ? "var(--ok)" : "var(--crit)" }}>{msg}</span>}</div>
   </div>;
 }
 
@@ -5280,10 +5343,12 @@ function AddMissedReview({ base, onAdded }) {
   const [items, setItems] = useState(null);
   const [err, setErr] = useState("");
   const search = async (e) => { e.preventDefault(); setErr(""); try { setItems((await readJsonOrThrow(await apiFetch(`${base}/doctor/me/review-search?q=${encodeURIComponent(q)}`), "Search failed")).items); } catch (x) { setErr(x.message); } };
-  const add = async (k) => { try { await sendJson(`${base}/doctor/me/reviews/${encodeURIComponent(k)}/add`, "POST", undefined, "Could not add"); setItems(it => it.filter(i => i.key !== k)); onAdded && onAdded(); } catch (x) { setErr(x.message); } };
+  const [note, setNote] = useState("");
+  const add = async (k) => { try { await sendJson(`${base}/doctor/me/reviews/${encodeURIComponent(k)}/add`, "POST", undefined, "Could not add"); setItems(it => it.filter(i => i.key !== k)); setNote("Added. It appears in My reviews once your organisation approves it."); onAdded && onAdded(); } catch (x) { setErr(x.message); } };
   return <div>
     <form onSubmit={search} className="row" style={{ gap: 8 }}><input className="f" style={{ flex: 1, minWidth: 180 }} aria-label="Search all reviews" placeholder="Search by name, clinic or words in the review" value={q} onChange={e => setQ(e.target.value)} /><button className="btn" type="submit">Search</button></form>
     {err && <p role="alert" className="small" style={{ color: "var(--crit)" }}>{err}</p>}
+    {note && <p role="status" className="small" style={{ color: "var(--ok)" }}>{note}</p>}
     {items && (items.length ? <div style={{ display: "grid", gap: 8, marginTop: 10 }}>{items.map(i => <div key={i.key} className="dp-review" style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
       <div style={{ flex: 1, minWidth: 200 }}><b>{i.doctor_name}</b> <span className="small muted">· {i.clinic} · {fmtDate(i.date)}</span><div className="small">{i.text}</div></div>
       <button className="btn" onClick={() => add(i.key)}>Add to my reviews</button></div>)}</div> : <p className="small muted">No reviews found.</p>)}
@@ -5312,6 +5377,7 @@ function DoctorReviews({ apiBaseUrl }) {
       <button className="btn" onClick={() => setPanel(p => p === "add" ? "" : "add")}>Add a missed review</button>
     </PageHead>
     <DemoNotice on={data.show_demo} base={base} onChange={load} />
+    {data.identity.claim_status !== "approved" && panel !== "match" && <div style={{ marginBottom: 16 }}><ClaimStatus identity={data.identity} compact /></div>}
     {panel === "match" && <section className="panel" style={{ marginBottom: 16 }}><p className="n" style={{ marginTop: 0 }}>MATCHED ON</p><MatchSettings base={base} identity={data.identity} onSaved={load} />
       <div className="row small" style={{ gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         {data.identity.hidden_count > 0 && <button className="btn" onClick={restore}>Show {data.identity.hidden_count} hidden review{data.identity.hidden_count === 1 ? "" : "s"} again</button>}
@@ -5336,7 +5402,7 @@ function FeedbackItem({ f, base, onChanged }) {
   const [msg, setMsg] = useState("");
   const send = async (body) => {
     setBusy(true); setMsg("");
-    try { const r = await sendJson(`${base}/doctor/me/feedback/${f.id}`, "PATCH", body, "Could not update"); setMsg(body.reply ? (r.email?.sent ? `Reply sent. Patient emailed (${r.email.to}).` : f.is_demo ? "Reply saved (demo item, no email)." : `Reply saved. Email not sent${r.email?.error ? `: ${r.email.error}` : ""}.`) : "Updated."); onChanged && onChanged(); }
+    try { const r = await sendJson(`${base}/doctor/me/feedback/${f.id}`, "PATCH", body, "Could not update"); const text = body.reply ? (r.email?.sent ? `Reply sent to ${f.patient_name || "the patient"}. Patient emailed (${r.email.to}).` : f.is_demo ? "Reply saved (demo item, no email)." : `Reply saved. Email not sent${r.email?.error ? `: ${String(r.email.error).replace(/\.$/, "")}` : ""}.`) : `Marked ${body.status}.`; setMsg(text); onChanged && onChanged(text); }
     catch (e) { setMsg(e.message); } finally { setBusy(false); }
   };
   const tone = f.status === "open" ? "pending" : f.status === "resolved" ? "approved" : "";
@@ -5361,6 +5427,8 @@ function DoctorInbox({ apiBaseUrl, go }) {
   const { base, data, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/feedback");
   const [tab, setTab] = useState("complaint");
   const [status, setStatus] = useState("open");
+  const [notice, setNotice] = useState("");
+  const changed = (text) => { if (text) setNotice(text); load(); };
   if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
   if (!data) return <section className="panel"><p className="muted">Loading messages…</p></section>;
   const list = data.items.filter(i => i.kind === tab && (status === "all" || i.status === status));
@@ -5369,9 +5437,10 @@ function DoctorInbox({ apiBaseUrl, go }) {
     <PageHead title="Complaints & queries" sub="Questions and concerns patients sent you, and negative reviews flagged by the AI." />
     <section className="panel">
       <Tabs label="Inbox" value={tab} onChange={setTab} tabs={[["complaint", "Complaints", openN("complaint")], ["query", "Queries", openN("query")], ["reviews", "From reviews", data.review_complaints.length]]} />
+      {notice && <p role="status" style={{ color: /not sent/.test(notice) ? "var(--crit)" : "var(--ok)", marginTop: 0 }}>{notice}</p>}
       {tab !== "reviews" ? <>
         <div className="seg" role="group" aria-label="Status" style={{ marginBottom: 12 }}>{[["open", "Open"], ["answered", "Answered"], ["resolved", "Resolved"], ["all", "All"]].map(([k, l]) => <button key={k} className={status === k ? "on" : ""} onClick={() => setStatus(k)}>{l} {k !== "all" && <span className="muted small">{data.counts[tab]?.[k] ?? 0}</span>}</button>)}</div>
-        {list.length ? <div style={{ display: "grid", gap: 12 }}>{list.map(f => <FeedbackItem key={f.id} f={f} base={base} onChanged={load} />)}</div>
+        {list.length ? <div style={{ display: "grid", gap: 12 }}>{list.map(f => <FeedbackItem key={f.id} f={f} base={base} onChanged={changed} />)}</div>
           : <EmptyArt kind="search" title={`No ${status === "all" ? "" : status + " "}${tab === "query" ? "queries" : "complaints"}`} text="Patients can send these from their Appointments page." />}
       </> : <>
         <p className="small muted" style={{ marginTop: 0 }}>Negative reviews about you. Reply publicly or mark wrong matches as <b>Not me</b>.</p>
@@ -5426,6 +5495,55 @@ function DoctorProfilePage({ apiBaseUrl, onHprChange }) {
   </>;
 }
 
+/* Organisation: approve the names and clinics doctors claim, before real reviews are linked to them. */
+function OrgDoctorClaims({ apiBaseUrl }) {
+  const [status, setStatus] = useState("pending");
+  const { base, data, err, load } = useDoctorApi(apiBaseUrl, `/org/doctor-claims?status=${status}`);
+  // New claims can arrive while this page is open: refresh every 30 seconds and when the tab regains focus.
+  useEffect(() => { const t = setInterval(load, 30000); window.addEventListener("focus", load); return () => { clearInterval(t); window.removeEventListener("focus", load); }; }, [load]);
+  const [notes, setNotes] = useState({});
+  const [msg, setMsg] = useState({});
+  const [busy, setBusy] = useState("");
+  const [done, setDone] = useState("");
+  const decide = async (c, action) => {
+    setBusy(c.doctor_sub); setMsg(m => ({ ...m, [c.doctor_sub]: "" }));
+    try { const r = await sendJson(`${base}/org/doctor-claims/${encodeURIComponent(c.doctor_sub)}`, "POST", { action, note: notes[c.doctor_sub] || "" }, "Could not save");
+      setDone(`${c.doctor_name || "Doctor"}: ${action === "approve" ? "approved. Their reviews are now linked." : "not approved."}${r.email?.sent ? " Doctor emailed." : ""}`); load(); }
+    catch (e) { setMsg(m => ({ ...m, [c.doctor_sub]: e.message })); } finally { setBusy(""); }
+  };
+  return <>
+    <PageHead title="Doctor claims" sub="Doctors claim the names and clinics their reviews are listed under. Approve a claim before those reviews are linked to the doctor's account." />
+    <section className="panel">
+      <Tabs label="Claim status" value={status} onChange={setStatus} tabs={[["pending", "Waiting", data?.counts?.pending], ["approved", "Approved", data?.counts?.approved], ["rejected", "Not approved", data?.counts?.rejected]]} />
+      {err && <p role="alert" style={{ color: "var(--crit)" }}>{err}</p>}
+      {done && <p role="status" style={{ color: "var(--ok)", marginTop: 0 }}>{done}</p>}
+      {!data ? <p className="muted">Loading…</p> : !data.items.length ? <EmptyArt kind="search" title="Nothing here" text={status === "pending" ? "No doctor claims are waiting." : "No claims in this list."} /> :
+        <div style={{ display: "grid", gap: 12 }}>{data.items.map(c => <article key={c.doctor_sub} className="dp-review">
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div><b>{c.doctor_name || "Doctor"}</b> <span className="small muted">· {c.email}{c.specialty ? ` · ${c.specialty}` : ""}{c.account_org ? ` · ${c.account_org}` : ""}</span>
+              <div className="small" style={{ marginTop: 4 }}>HPR: {c.hpr ? <><b>{c.hpr}</b> ({c.hpr_verified ? "verified" : "self-declared"})</> : <span className="muted">not added</span>}</div></div>
+            <span className={"chip " + (CLAIM_TEXT[c.claim_status] || CLAIM_TEXT.pending)[0]} style={{ alignSelf: "flex-start" }}>{(CLAIM_TEXT[c.claim_status] || CLAIM_TEXT.pending)[1]}</span>
+          </div>
+          <div className="grid2" style={{ gap: 12, marginTop: 10 }}>
+            <div><span className="small muted">Names claimed</span><div>{c.name_variants.join(", ") || "—"}</div>
+              {c.claim_status !== "approved" && c.approved_names.length > 0 && <div className="small muted">Approved before: {c.approved_names.join(", ")}</div>}</div>
+            <div><span className="small muted">Clinics claimed</span><div>{c.clinics.join(", ") || "—"}</div></div>
+          </div>
+          {c.pending_added_reviews.length > 0 && <div style={{ marginTop: 10 }}><span className="small muted">Reviews the doctor added by hand</span>
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{c.pending_added_reviews.map(r => <li key={r.key} className="small"><b>{r.doctor_name}</b> · {r.clinic}: {r.text}</li>)}</ul></div>}
+          {c.claim_note && <p className="small" style={{ margin: "8px 0 0" }}><b>Note:</b> {c.claim_note}</p>}
+          {c.claim_status === "pending" && <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+            <input className="f" aria-label={`Note for ${c.doctor_name}`} placeholder="Note to the doctor (needed when not approving)" value={notes[c.doctor_sub] || ""} onChange={e => setNotes(n => ({ ...n, [c.doctor_sub]: e.target.value }))} />
+            <div className="row" style={{ gap: 8 }}><button className="btn pri" disabled={busy === c.doctor_sub} onClick={() => decide(c, "approve")}>Approve</button><button className="btn" disabled={busy === c.doctor_sub} onClick={() => decide(c, "reject")}>Don't approve</button></div>
+          </div>}
+          {c.claim_status !== "pending" && <div className="row" style={{ gap: 8, marginTop: 10 }}><button className="btn" disabled={busy === c.doctor_sub} onClick={() => decide(c, c.claim_status === "approved" ? "reject" : "approve")}>{c.claim_status === "approved" ? "Revoke approval" : "Approve now"}</button>
+            {c.claim_status === "approved" && <input className="f" style={{ flex: 1, minWidth: 180 }} aria-label="Reason" placeholder="Reason (needed to revoke)" value={notes[c.doctor_sub] || ""} onChange={e => setNotes(n => ({ ...n, [c.doctor_sub]: e.target.value }))} />}</div>}
+          {msg[c.doctor_sub] && <p role="status" className="small" style={{ margin: "6px 0 0", color: /Could not|reason|Add a/i.test(msg[c.doctor_sub]) ? "var(--crit)" : "var(--ok)" }}>{msg[c.doctor_sub]}</p>}
+        </article>)}</div>}
+    </section>
+  </>;
+}
+
 /* Patient side: ask the appointment's doctor a question or raise a concern; see replies. */
 function AppointmentMessages({ base, a, items, onSent }) {
   const [mode, setMode] = useState("");
@@ -5468,7 +5586,7 @@ function LinkedDoctorProfile({ base, doctorSub }) {
 const NAV = [
   ["Overview", [["home", "Home", "home"], ["dashboard", "Dashboard", "dash"], ["try", "Try It", "flask"]]],
   ["Analysis", [["reviews", "Reviews", "reviews"], ["investigation", "Investigation", "invest"], ["action", "Action center", "action"], ["reports", "Reports", "reports"]]],
-  ["Workflow", [["approval", "Approvals", "approval"]]],
+  ["Workflow", [["approval", "Approvals", "approval"], ["doctor-claims", "Doctor claims", "check"]]],
   ["Account", [["settings", "Settings", "settings"]]],
 ];
 const DEFAULTS = {
@@ -7272,6 +7390,7 @@ function App() {
       : <Settings settings={settings} setSettings={setSettings} toast={setToastMsg} />, about: <About go={setPage} />, contact: <Contact apiBaseUrl={settings.api} auth={googleAuth} />,
     "doctor-reviews": <DoctorReviews apiBaseUrl={settings.api} />, "doctor-inbox": <DoctorInbox apiBaseUrl={settings.api} go={setPage} />,
     "doctor-profile": <DoctorProfilePage apiBaseUrl={settings.api} onHprChange={setHprFlag} />,
+    "doctor-claims": googleAuth.role === "organization" ? <OrgDoctorClaims apiBaseUrl={settings.api} /> : dashboardView,
   }[page];
 
   return <>
@@ -7300,7 +7419,7 @@ function App() {
               ? [["patient-dashboard", "My care", "dash"], ["patient-appointments", "Appointments", "check"], ["patient-records", "My records", "file"], ["patient-glow", "Prep & Perk", "glow"], ["patient-activities", "Activities", "pulse"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
               // Doctors: their own portal only. Hospital-wide pages belong to the Organisation login.
               : googleAuth.role === "doctor"
-              ? [["dashboard", "My dashboard", "dash"], ["doctor-reviews", "My reviews", "reviews"], ["doctor-inbox", "Complaints & queries", "approval"], ["my-patients", "My patients", "user"], ["doctor-profile", "My profile", "file"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
+              ? [["dashboard", "My dashboard", "dash"], ["doctor-reviews", "My reviews", "reviews"], ["doctor-inbox", "Complaints & queries", "approval"], ["my-patients", "My patients", "user"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["doctor-profile", "My profile", "file"], ["contact", "Contact us", "contact"]]
               // Organisations: the same sections their sidebar had, now in the header.
               : NAV.flatMap(([, items]) => items)
                 .filter(([k]) => k !== "home" && !(googleAuth.role === "doctor" && k === "investigation"))
