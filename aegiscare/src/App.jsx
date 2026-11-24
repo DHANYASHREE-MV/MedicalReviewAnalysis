@@ -3168,8 +3168,12 @@ function DoctorPatientProfile({ apiBaseUrl, appointmentId, onBack, onChanged, on
     setBusy(true); setNote(""); setErr("");
     try {
       const body = { ...form, ...extra, prescription: (form.prescription || []).filter(r => String(r.medicine || "").trim()) };
-      await readJsonOrThrow(await apiFetch(`${base}/doctor/appointments/${appointmentId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), "Could not save");
-      setNote("Saved. The patient can see the update on their dashboard."); await load(); onChanged && onChanged();
+      const res = await readJsonOrThrow(await apiFetch(`${base}/doctor/appointments/${appointmentId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), "Could not save");
+      const n = res.notification;
+      const sentTo = n ? [n.email?.sent && "email", n.sms?.sent && "SMS"].filter(Boolean) : [];
+      const failed = n ? [["Email", n.email], ["SMS", n.sms]].filter(([, x]) => x && !x.sent).map(([k, x]) => `${k}: ${x.error || "not sent"}`) : [];
+      setNote(n ? `Confirmed. ${sentTo.length ? `Patient notified by ${sentTo.join(" and ")}.` : "Patient sees it on their Appointments page."}${failed.length ? ` ${failed.join(" · ")}` : ""}` : "Saved. The patient can see the update on their dashboard.");
+      await load(); onChanged && onChanged();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };

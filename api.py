@@ -3332,13 +3332,28 @@ def update_doctor_appointment(appointment_id: int, payload: dict, request: Reque
     if not sets:
         raise HTTPException(status_code=400, detail="Nothing to update.")
     with engine.begin() as conn:
-        _doctor_appointment(conn, appointment_id, scope)  # 404 unless this doctor may work on it
+        before = _doctor_appointment(conn, appointment_id, scope)  # 404 unless this doctor may work on it
+        newly_confirmed = params.get("status") == "confirmed" and _norm_status(before["status"]) != "confirmed"
+        if newly_confirmed:
+            sets.append("confirmed_at=NOW()")
         conn.execute(_auth_text(f"""
             UPDATE aegiscare_patient_appointments SET {", ".join(sets)}, doctor_updated_at=NOW()
             WHERE id=:id AND doctor_sub = ANY(:scope)
         """), params)
         row = _doctor_appointment(conn, appointment_id, scope)
-    return {"appointment": _appointment_public(row), "message": "Appointment updated."}
+    if not newly_confirmed:
+        return {"appointment": _appointment_public(row), "message": "Appointment updated."}
+    # Confirming from the status menu notifies the patient the same way as "Accept & notify patient".
+    row = dict(row)
+    with engine.begin() as conn:
+        row["doctor_name"] = conn.execute(_auth_text("SELECT display_name FROM aegiscare_google_users WHERE google_sub=:s"),
+                                          {"s": row.get("doctor_sub")}).scalar()
+    notification = _notify_patient_confirmation(row, row["google_sub"])
+    with engine.begin() as conn:
+        conn.execute(_auth_text("UPDATE aegiscare_patient_appointments SET notification=CAST(:n AS JSONB) WHERE id=:id"),
+                     {"n": _care_json.dumps(notification), "id": appointment_id})
+        row = _doctor_appointment(conn, appointment_id, scope)
+    return {"appointment": _appointment_public(row), "notification": notification, "message": "Appointment confirmed."}
 
 
 # ------------------------------------------------------------
