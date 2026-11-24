@@ -1610,3 +1610,12 @@ body { background: var(--bg); }
 .dp-initials { display: grid; place-items: center; background: var(--brand); color: var(--brand-ink, #fff); font-family: "Anton", Impact, sans-serif; font-size: 24px; }
 .dp-demo { border-left: 3px solid var(--brand); }
 @media (max-width: 760px) { .dp-profile { grid-template-columns: 1fr !important; } .dp-trend { gap: 6px; } }
+.dp-claim { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: 0 10px 10px 0; background: var(--surface); }
+.dp-claim.approved { border-left-color: var(--ok, #5d7a3e); }
+.dp-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; height: 190px; margin: 14px 0 8px; }
+.dp-wday { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; height: 100%; padding: 6px 2px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; color: inherit; font: inherit; }
+.dp-wday:hover, .dp-wday.on { border-color: var(--line); background: var(--surface-2); }
+.dp-wday .dp-stack { flex: none; }
+.dp-dayreasons { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.dp-bar.pos i { background: var(--ok, #5d7a3e); }
+.dp-wbar { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }

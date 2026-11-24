@@ -4377,6 +4377,12 @@ def _ensure_doctor_portal_tables():
             )
         """))
         conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_feedback_doc ON aegiscare_doctor_feedback (doctor_sub)"))
+        # Name/clinic claims need approval by an Organisation account before they match real reviews.
+        for col, ddl in [("approved_names", "JSONB NOT NULL DEFAULT '[]'::jsonb"), ("approved_clinics", "JSONB NOT NULL DEFAULT '[]'::jsonb"),
+                         ("approved_added", "JSONB NOT NULL DEFAULT '[]'::jsonb"), ("claim_status", "TEXT NOT NULL DEFAULT 'pending'"),
+                         ("claim_note", "TEXT"), ("claim_submitted_at", "TIMESTAMPTZ DEFAULT NOW()"),
+                         ("claim_reviewed_by", "TEXT"), ("claim_reviewed_at", "TIMESTAMPTZ")]:
+            conn.execute(_auth_text(f"ALTER TABLE aegiscare_doctor_identity ADD COLUMN IF NOT EXISTS {col} {ddl}"))
         conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_feedback_pat ON aegiscare_doctor_feedback (patient_sub)"))
 
 
@@ -4491,10 +4497,13 @@ def _suggest_reply(sentiment, category, first_name="there"):
 
 def _doctor_reviews(conn, doctor_sub, ident):
     """Real reviews matched to the doctor's claimed names/clinics, plus demo reviews while enabled."""
-    variants = _clean_list(_jsonish(ident.get("name_variants"), []))
-    clinics = _clean_list(_jsonish(ident.get("clinics"), []))
+    # Only claims approved by an Organisation account match real reviews.
+    variants = _clean_list(_jsonish(ident.get("approved_names"), []))
+    clinics = _clean_list(_jsonish(ident.get("approved_clinics"), []))
     hidden = set(str(x) for x in _jsonish(ident.get("hidden_reviews"), []))
-    added = [str(x) for x in _jsonish(ident.get("added_reviews"), [])]
+    added = [str(x) for x in _jsonish(ident.get("approved_added"), [])]
+    demo_names = variants or _clean_list(_jsonish(ident.get("name_variants"), []))
+    demo_clinics = clinics or _clean_list(_jsonish(ident.get("clinics"), []))
     keys = sorted({k for k in (_name_key(v) for v in variants) if len(k) >= 5})
     words = sorted({re.sub(r"^\s*(dr|doctor)\b\.?\s*", "", v, flags=re.I).strip() for v in variants}, key=len, reverse=True)
     words = [w for w in words if len(w) >= 4][:5]
@@ -4544,8 +4553,8 @@ def _doctor_reviews(conn, doctor_sub, ident):
             "reply": replies.get(key), "suggested_reply": _suggest_reply(sent, cat),
         })
     if ident.get("show_demo", True):
-        clinic = clinics[0] if clinics else "AegisCare Partner Clinic"
-        name = variants[0] if variants else "Doctor"
+        clinic = demo_clinics[0] if demo_clinics else "AegisCare Partner Clinic"
+        name = demo_names[0] if demo_names else "Doctor"
         today = _care_date.today()
         for i, (rating, text_, sent, cat, sev, ago) in enumerate(_DEMO_REVIEWS):
             key = f"demo-{i + 1}"
@@ -4559,6 +4568,52 @@ def _doctor_reviews(conn, doctor_sub, ident):
                 "reply": replies.get(key), "suggested_reply": _suggest_reply(sent, cat),
             })
     return items
+
+
+def _claim_public(ident):
+    return {
+        "name_variants": _jsonish(ident.get("name_variants"), []), "clinics": _jsonish(ident.get("clinics"), []),
+        "approved_names": _jsonish(ident.get("approved_names"), []), "approved_clinics": _jsonish(ident.get("approved_clinics"), []),
+        "pending_added": [x for x in _jsonish(ident.get("added_reviews"), []) if x not in _jsonish(ident.get("approved_added"), [])],
+        "claim_status": ident.get("claim_status") or "pending", "claim_note": ident.get("claim_note"),
+        "claim_reviewed_at": ident.get("claim_reviewed_at"), "claim_submitted_at": ident.get("claim_submitted_at"),
+        "hidden_count": len(_jsonish(ident.get("hidden_reviews"), [])),
+    }
+
+
+_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def _weekday_stats(items):
+    """Reviews per day of the week (exact dates only) with the main reasons per day."""
+    days = [{"day": d, "positive": 0, "neutral": 0, "negative": 0, "reasons": {}} for d in _WEEKDAYS]
+    undated = 0
+    for i in items:
+        d = _review_date(i.get("date"))
+        if not d:
+            undated += 1
+            continue
+        row = days[d.weekday()]
+        row[i["sentiment"]] = row.get(i["sentiment"], 0) + 1
+        cat = i.get("category") or "Uncategorised"
+        r = row["reasons"].setdefault(cat, {"category": cat, "positive": 0, "neutral": 0, "negative": 0})
+        r[i["sentiment"]] += 1
+    for row in days:
+        row["total"] = row["positive"] + row["neutral"] + row["negative"]
+        row["reasons"] = sorted(row["reasons"].values(), key=lambda x: -(x["positive"] + x["neutral"] + x["negative"]))[:4]
+    return {"days": days, "undated": undated}
+
+
+def _reasons(items):
+    out = {}
+    for s in ("positive", "negative"):
+        counts = {}
+        for i in items:
+            if i["sentiment"] == s:
+                c = i.get("category") or "Uncategorised"
+                counts[c] = counts.get(c, 0) + 1
+        out[s] = [{"category": k, "count": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])][:5]
+    return out
 
 
 def _review_date(value):
@@ -4626,7 +4681,8 @@ def doctor_portal_summary(request: Request):
         "negative_reviews": counts["negative"], "pending_appointments": int(pending),
         "latest": latest, "show_demo": bool(ident.get("show_demo", True)),
         "profile": dict(prof) if prof else None,
-        "identity": {"name_variants": _jsonish(ident.get("name_variants"), []), "clinics": _jsonish(ident.get("clinics"), [])},
+        "weekdays": _weekday_stats(items), "reasons": _reasons(items),
+        "identity": _claim_public(ident),
     }
 
 
@@ -4637,8 +4693,7 @@ def doctor_portal_reviews(request: Request):
         items = _doctor_reviews(conn, doctor_sub, ident)
     items.sort(key=lambda i: _review_date(i["date"]) or _care_date(1900, 1, 1), reverse=True)
     return {"items": items, "show_demo": bool(ident.get("show_demo", True)),
-            "identity": {"name_variants": _jsonish(ident.get("name_variants"), []), "clinics": _jsonish(ident.get("clinics"), []),
-                         "hidden_count": len(_jsonish(ident.get("hidden_reviews"), []))}}
+            "identity": _claim_public(ident)}
 
 
 @app.put("/api/doctor/me/identity")
@@ -4661,6 +4716,16 @@ def doctor_portal_identity(payload: dict, request: Request):
         sets.append("hidden_reviews='[]'::jsonb")
     if not sets:
         raise HTTPException(status_code=400, detail="Nothing to update.")
+    if "v" in params or "c" in params:
+        new_names = _care_json.loads(params["v"]) if "v" in params else _jsonish(ident.get("name_variants"), [])
+        new_clinics = _care_json.loads(params["c"]) if "c" in params else _jsonish(ident.get("clinics"), [])
+        same = ([x.lower() for x in new_names] == [x.lower() for x in _jsonish(ident.get("approved_names"), [])]
+                and [x.lower() for x in new_clinics] == [x.lower() for x in _jsonish(ident.get("approved_clinics"), [])]
+                and not _claim_public(ident)["pending_added"])
+        if not same:
+            sets += ["claim_status='pending'", "claim_note=NULL", "claim_submitted_at=NOW()"]
+        elif _jsonish(ident.get("approved_names"), []):
+            sets += ["claim_status='approved'", "claim_note=NULL"]  # back to what was already approved
     with engine.begin() as conn:
         conn.execute(_auth_text(f"UPDATE aegiscare_doctor_identity SET {', '.join(sets)}, updated_at=NOW() WHERE doctor_sub=:s"), params)
         if "show_demo" in payload:
@@ -4679,9 +4744,10 @@ def doctor_portal_hide_review(review_key: str, request: Request, hidden: bool = 
     cur = [str(x) for x in _jsonish(ident.get("hidden_reviews"), [])]
     cur = [x for x in cur if x != key] + ([key] if hidden else [])
     added = [str(x) for x in _jsonish(ident.get("added_reviews"), []) if not (hidden and str(x) == key)]
+    appr = [str(x) for x in _jsonish(ident.get("approved_added"), []) if not (hidden and str(x) == key)]
     with engine.begin() as conn:
-        conn.execute(_auth_text("UPDATE aegiscare_doctor_identity SET hidden_reviews=CAST(:h AS JSONB), added_reviews=CAST(:a AS JSONB), updated_at=NOW() WHERE doctor_sub=:s"),
-                     {"s": doctor_sub, "h": _care_json.dumps(cur[-500:]), "a": _care_json.dumps(added)})
+        conn.execute(_auth_text("UPDATE aegiscare_doctor_identity SET hidden_reviews=CAST(:h AS JSONB), added_reviews=CAST(:a AS JSONB), approved_added=CAST(:aa AS JSONB), updated_at=NOW() WHERE doctor_sub=:s"),
+                     {"s": doctor_sub, "h": _care_json.dumps(cur[-500:]), "a": _care_json.dumps(added), "aa": _care_json.dumps(appr)})
     return {"hidden": hidden, "review_key": key}
 
 
@@ -4716,9 +4782,10 @@ def doctor_portal_add_review(review_key: str, request: Request):
             raise HTTPException(status_code=404, detail="Review not found.")
         added = [str(x) for x in _jsonish(ident.get("added_reviews"), []) if str(x) != key] + [key]
         hidden = [str(x) for x in _jsonish(ident.get("hidden_reviews"), []) if str(x) != key]
-        conn.execute(_auth_text("UPDATE aegiscare_doctor_identity SET added_reviews=CAST(:a AS JSONB), hidden_reviews=CAST(:h AS JSONB), updated_at=NOW() WHERE doctor_sub=:s"),
+        conn.execute(_auth_text("""UPDATE aegiscare_doctor_identity SET added_reviews=CAST(:a AS JSONB), hidden_reviews=CAST(:h AS JSONB),
+                     claim_status='pending', claim_note=NULL, claim_submitted_at=NOW(), updated_at=NOW() WHERE doctor_sub=:s"""),
                      {"s": doctor_sub, "a": _care_json.dumps(added[-300:]), "h": _care_json.dumps(hidden)})
-    return {"added": key}
+    return {"added": key, "claim_status": "pending"}
 
 
 @app.put("/api/doctor/me/reviews/{review_key}/reply")
@@ -4816,7 +4883,7 @@ def doctor_portal_profile(request: Request):
     out = dict(prof) if prof else {}
     out.pop("doctor_sub", None)
     return {"profile": out, "hpr": dict(hpr) if hpr else None,
-            "identity": {"name_variants": _jsonish(ident.get("name_variants"), []), "clinics": _jsonish(ident.get("clinics"), [])}}
+            "identity": _claim_public(ident)}
 
 
 @app.put("/api/doctor/me/profile")
@@ -4903,3 +4970,99 @@ def patient_list_feedback(request: Request):
             FROM aegiscare_doctor_feedback WHERE patient_sub=:s ORDER BY created_at DESC LIMIT 100
         """), {"s": google_sub}).mappings().all()
     return {"items": [dict(r) for r in rows]}
+
+
+
+# --------------------------- Organisation: approve doctors' name claims ---------------------------
+def _org_ctx(request: Request):
+    org_sub = _require_role(request, "organization", "Only Organisation accounts can review doctor claims.")
+    _ensure_doctor_portal_tables()
+    return org_sub, (_profile_for_sub(org_sub).get("org_name") or "").strip()
+
+
+def _claim_for_org(org_name, clinics):
+    """An organisation sees claims naming its hospital; claims naming no hospital are visible to every organisation."""
+    if not org_name or not clinics:
+        return True
+    key = _name_key(org_name)
+    return any(key and (key in _name_key(c) or _name_key(c) in key) for c in clinics)
+
+
+@app.get("/api/org/doctor-claims")
+def org_list_doctor_claims(request: Request, status: str = "pending"):
+    _org_sub, org_name = _org_ctx(request)
+    with engine.begin() as conn:
+        rows = conn.execute(_auth_text("""
+            SELECT i.*, u.display_name, u.email, p.specialty, p.org_name, h.hpr_id, h.verified AS hpr_verified
+            FROM aegiscare_doctor_identity i
+            LEFT JOIN aegiscare_google_users u ON u.google_sub = i.doctor_sub
+            LEFT JOIN aegiscare_user_profiles p ON p.google_sub = i.doctor_sub
+            LEFT JOIN aegiscare_doctor_hpr h ON h.google_sub = i.doctor_sub
+            ORDER BY i.claim_submitted_at DESC NULLS LAST
+        """)).mappings().all()
+        items = []
+        for r in rows:
+            claim = _claim_public(r)
+            if not _claim_for_org(org_name, claim["clinics"] + claim["approved_clinics"]):
+                continue
+            added = []
+            if claim["pending_added"]:
+                try:
+                    with conn.begin_nested():
+                        added = [dict(x) for x in conn.execute(_auth_text("""
+                            SELECT CAST(review_id AS TEXT) AS key, doctor_name, clinic___hospital AS clinic, LEFT(review_text, 200) AS text
+                            FROM reviews WHERE CAST(review_id AS TEXT) = ANY(:k)"""), {"k": claim["pending_added"]}).mappings()]
+                except Exception:
+                    added = []
+            items.append({"doctor_sub": r["doctor_sub"], "doctor_name": r["display_name"], "email": r["email"],
+                          "specialty": r["specialty"], "account_org": r["org_name"],
+                          "hpr": (_format_14(r["hpr_id"]) if r["hpr_id"] and r["hpr_id"].isdigit() else r["hpr_id"]),
+                          "hpr_verified": bool(r["hpr_verified"]), "pending_added_reviews": added, **claim})
+    counts = {k: sum(1 for i in items if i["claim_status"] == k) for k in ("pending", "approved", "rejected")}
+    if status in counts:
+        items = [i for i in items if i["claim_status"] == status]
+    return {"items": items, "counts": counts, "org_name": org_name}
+
+
+@app.post("/api/org/doctor-claims/{doctor_sub}")
+def org_decide_doctor_claim(doctor_sub: str, payload: dict, request: Request):
+    """Approve (names, clinics and added reviews start matching) or reject with a note. The doctor is emailed."""
+    org_sub, org_name = _org_ctx(request)
+    action = str(payload.get("action") or "").lower()
+    note = str(payload.get("note") or "").strip()[:500] or None
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="Action must be approve or reject.")
+    if action == "reject" and not note:
+        raise HTTPException(status_code=400, detail="Add a short reason so the doctor knows what to change.")
+    with engine.begin() as conn:
+        ident = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_identity WHERE doctor_sub=:s"), {"s": doctor_sub[:200]}).mappings().first()
+        if not ident:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        claim = _claim_public(ident)
+        if not _claim_for_org(org_name, claim["clinics"] + claim["approved_clinics"]):
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        if action == "approve":
+            conn.execute(_auth_text("""
+                UPDATE aegiscare_doctor_identity SET approved_names=name_variants, approved_clinics=clinics, approved_added=added_reviews,
+                    claim_status='approved', claim_note=:n, claim_reviewed_by=:o, claim_reviewed_at=NOW() WHERE doctor_sub=:s
+            """), {"s": doctor_sub, "n": note, "o": org_sub})
+        else:
+            conn.execute(_auth_text("""
+                UPDATE aegiscare_doctor_identity SET claim_status='rejected', claim_note=:n, claim_reviewed_by=:o, claim_reviewed_at=NOW()
+                WHERE doctor_sub=:s
+            """), {"s": doctor_sub, "n": note, "o": org_sub})
+        row = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_identity WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings().first()
+    email = {"sent": False}
+    name, to = _account_name_email(doctor_sub)
+    sender = os.getenv("SMTP_FROM", "").strip()
+    if to and sender and not to.endswith(".local"):
+        body = (f"Hello {name or 'Doctor'},\n\n{org_name or 'Your organisation'} has "
+                f"{'approved' if action == 'approve' else 'not approved'} the names and clinics you claimed in AegisCare."
+                + ("\n\nYour real reviews will now appear in My reviews." if action == "approve" else "")
+                + (f"\n\nNote: {note}" if note else "") + "\n\nAegisCare")
+        try:
+            _send_via_brevo(to, f"Your AegisCare review claim was {'approved' if action == 'approve' else 'not approved'}", body, sender)
+            email = {"sent": True, "to": _mask(to)}
+        except HTTPException as exc:
+            email = {"sent": False, "error": str(exc.detail)[:200]}
+    return {"claim": _claim_public(row), "email": email}
