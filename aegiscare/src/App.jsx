@@ -855,21 +855,13 @@ function pipelineErrorMessage(detail, fallback) {
 // Raised from the old 500 cap; the backend now accepts up to 5000 reviews per run.
 const REVIEW_COUNT_MAX = 5000;
 const SOURCE_OPTIONS = {
-  all: {
-    label: "All available sources", supported: true,
-    desc: "Combines the imported dataset (PostgreSQL) with Google Maps retrieval in one run. If one source comes up short, the other fills the gap."
+  apify: {
+    label: "Google Maps reviews (via Apify)", supported: true,
+    desc: "Fetches live Google Maps reviews through Apify's reviews actor. Works online and is reliable for larger review counts."
   },
   dataset: {
-    label: "Imported dataset (PostgreSQL)", supported: true,
-    desc: "Searches the imported Excel rows in PostgreSQL only. It does not open Google Maps."
-  },
-  maps: {
-    label: "Google Maps retrieval", supported: true,
-    desc: "Uses the existing Google Maps scraper only. It does not search imported dataset rows."
-  },
-  apify: {
-    label: "Apify (Google Maps)", supported: true,
-    desc: "Uses Apify's Google Maps reviews actor instead of the in-browser scraper. Needs an Apify API key set on the backend (APIFY_API_KEY in .env). Usually faster and more reliable for larger review counts."
+    label: "Imported dataset", supported: true,
+    desc: "Searches the imported review dataset stored in PostgreSQL. It does not contact Google Maps."
   },
 };
 const TIME_RANGE_OPTIONS = {
@@ -885,10 +877,9 @@ function AgentPlayground({ go, apiBaseUrl = API.baseUrl, role = "" }) {
   const [diseaseInput, setDiseaseInput] = useState("");
   const [hospitalInput, setHospitalInput] = useState("");
   const [locationInput, setLocationInput] = useState("");
-  // Patient accounts start on "All available sources"; everyone else keeps Google Maps as the default.
-  const [source, setSource] = useState(role === "patient" ? "all" : "maps");
+  // Two sources for every role: Google Maps reviews via Apify (default) and the imported dataset.
+  const [source, setSource] = useState("apify");
   const sourceTouched = useRef(false);
-  useEffect(() => { if (role === "patient" && !sourceTouched.current) setSource("all"); }, [role]);
   const [timeRange, setTimeRange] = useState("all");
   const [fieldErrors, setFieldErrors] = useState({});
   const [reviewCount, setReviewCount] = useState("20");
@@ -1798,6 +1789,17 @@ function Action({ reviews, open, actionPlans = [], pipelineStats }) {
 
   const normalizedDirectPlans = normalizeActionPlans(actionPlans);
 
+  // Action center shows only what is available: empty fields, sections and plans are hidden.
+  const listItems = (value) => {
+    if (!value) return [];
+    return Array.isArray(value)
+      ? value.map(v => String(v ?? "").trim()).filter(v => v && v !== "—" && v !== "-")
+      : String(value).split(/\n|•|\r/).map(s => s.replace(/^[-*]\s*/, "").trim()).filter(v => v && v !== "—" && v !== "-");
+  };
+  const hasText = (value) => listItems(value).length > 0;
+  const planHasContent = (plan) => ["immediate_actions", "corrective_actions", "preventive_actions", "owner_role", "timeline", "success_metrics", "action", "public_reply"].some(k => hasText(plan[k]));
+
+
   const mappedPlans = reviews.flatMap(review =>
     (review.actionPlans || []).map((plan, index) => ({
       ...plan,
@@ -1850,7 +1852,7 @@ function Action({ reviews, open, actionPlans = [], pipelineStats }) {
   // use the action-plan rows already attached to the live reviews.
   // Never inject sample/presentation data into the live Action Center.
   // The page must reflect only rows returned by the API or plans attached to live reviews.
-  const allPlans = directPlans.length ? directPlans : mappedPlans;
+  const allPlans = (directPlans.length ? directPlans : mappedPlans).filter(planHasContent);
   const isDemo = false;
 
   // Group all Agent 3 outputs by review/case.
@@ -1908,7 +1910,12 @@ function Action({ reviews, open, actionPlans = [], pipelineStats }) {
     );
   };
 
-  const renderPlan = (plan, planIndex) => (
+  const renderPlan = (plan, planIndex) => {
+    const steps = [["Immediate actions", plan.immediate_actions], ["Corrective actions", plan.corrective_actions], ["Preventive actions", plan.preventive_actions]].filter(([, v]) => hasText(v));
+    const facts = [["Owner", plan.owner_role, true], ["Timeline", plan.timeline, true], ["Success metrics", plan.success_metrics, false]].filter(([, v]) => hasText(v));
+    const extra = [["Suggested action", plan.action], ["Public reply", plan.public_reply]].filter(([, v]) => hasText(v) && !steps.length);
+    const pr = String(plan.priority || "").trim();
+    return (
     <div
       key={plan._key || `${plan.reviewId}-${planIndex}`}
       className="panel"
@@ -1922,52 +1929,38 @@ function Action({ reviews, open, actionPlans = [], pipelineStats }) {
           </h3>
         </div>
 
-        <span className={
-          String(plan.priority || "").toLowerCase() === "high"
+        {pr && <span className={
+          pr.toLowerCase() === "high"
             ? "chip critical"
-            : String(plan.priority || "").toLowerCase() === "medium"
+            : pr.toLowerCase() === "medium"
               ? "chip pending"
               : "chip approved"
         }>
-          {String(plan.priority || "UNSPECIFIED").toUpperCase()}
-        </span>
+          {pr.toUpperCase()}
+        </span>}
       </div>
 
-      <div className="grid3" style={{ gap: 14, marginTop: 16 }}>
-        <div>
-          <div className="lab">Immediate actions</div>
-          {renderList(plan.immediate_actions)}
-        </div>
+      {steps.length > 0 && <div className={steps.length === 1 ? "" : steps.length === 2 ? "grid2" : "grid3"} style={{ gap: 14, marginTop: 16 }}>
+        {steps.map(([label, v]) => <div key={label}>
+          <div className="lab">{label}</div>
+          {renderList(v)}
+        </div>)}
+      </div>}
 
-        <div>
-          <div className="lab">Corrective actions</div>
-          {renderList(plan.corrective_actions)}
-        </div>
+      {extra.map(([label, v]) => <div key={label} style={{ marginTop: 16 }}>
+        <div className="lab">{label}</div>
+        <p style={{ margin: "6px 0", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{listItems(v).join("\n")}</p>
+      </div>)}
 
-        <div>
-          <div className="lab">Preventive actions</div>
-          {renderList(plan.preventive_actions)}
-        </div>
-      </div>
-
-      <div className="grid3" style={{ gap: 14, marginTop: 16 }}>
-        <div className="panel" style={{ marginTop: 0 }}>
-          <div className="lab">Owner</div>
-          <b>{plan.owner_role || "—"}</b>
-        </div>
-
-        <div className="panel" style={{ marginTop: 0 }}>
-          <div className="lab">Timeline</div>
-          <b>{plan.timeline || "—"}</b>
-        </div>
-
-        <div className="panel" style={{ marginTop: 0 }}>
-          <div className="lab">Success metrics</div>
-          {renderList(plan.success_metrics)}
-        </div>
-      </div>
+      {facts.length > 0 && <div className={facts.length === 1 ? "" : facts.length === 2 ? "grid2" : "grid3"} style={{ gap: 14, marginTop: 16 }}>
+        {facts.map(([label, v, bold]) => <div className="panel" style={{ marginTop: 0 }} key={label}>
+          <div className="lab">{label}</div>
+          {bold ? <b>{v}</b> : renderList(v)}
+        </div>)}
+      </div>}
     </div>
-  );
+    );
+  };
 
   return <>
     <PageHead
@@ -2039,42 +2032,25 @@ function Action({ reviews, open, actionPlans = [], pipelineStats }) {
               </div>
             )}
 
-            <div className="grid2" style={{ gap: 14, marginTop: 14 }}>
-              <div className="panel" style={{ marginTop: 0 }}>
-                <div className="lab">Root cause</div>
-                <p style={{ margin: "6px 0", lineHeight: 1.5 }}>
-                  {item.rootCause || "—"}
-                </p>
-              </div>
-
-              <div className="panel" style={{ marginTop: 0 }}>
-                <div className="lab">Evidence</div>
-                <p className="muted" style={{ margin: "6px 0", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                  {item.evidence || "—"}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid3" style={{ gap: 14, marginTop: 14 }}>
-              <div>
-                <div className="lab">Department</div>
-                <b>{item.department || "—"}</b>
-              </div>
-
-              <div>
-                <div className="lab">Responsible lead</div>
-                <b>{item.lead || "—"}</b>
-              </div>
-
-              <div>
-                <div className="lab">Confidence</div>
-                <b>
-                  {item.confidence
-                    ? `${Math.round(Number(item.confidence) * 100)}%`
-                    : "—"}
-                </b>
-              </div>
-            </div>
+            {(() => {
+              const why = [["Root cause", item.rootCause, false], ["Evidence", item.evidence, true]].filter(([, v]) => hasText(v));
+              const conf = Number(item.confidence);
+              const who = [["Department", item.department], ["Responsible lead", item.lead], ["Confidence", conf > 0 ? `${Math.round(conf * 100)}%` : ""]].filter(([, v]) => hasText(v));
+              return <>
+                {why.length > 0 && <div className={why.length === 2 ? "grid2" : ""} style={{ gap: 14, marginTop: 14 }}>
+                  {why.map(([label, v, muted]) => <div className="panel" style={{ marginTop: 0 }} key={label}>
+                    <div className="lab">{label}</div>
+                    <p className={muted ? "muted" : ""} style={{ margin: "6px 0", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{v}</p>
+                  </div>)}
+                </div>}
+                {who.length > 0 && <div className={who.length === 1 ? "" : who.length === 2 ? "grid2" : "grid3"} style={{ gap: 14, marginTop: 14 }}>
+                  {who.map(([label, v]) => <div key={label}>
+                    <div className="lab">{label}</div>
+                    <b>{v}</b>
+                  </div>)}
+                </div>}
+              </>;
+            })()}
 
             <div style={{ marginTop: 20 }}>
               <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
@@ -3056,10 +3032,21 @@ function PatientRecords({ apiBaseUrl, go }) {
 }
 
 /* ---------------- Patient: doctor's update on an appointment ---------------- */
+// Doctor's confirmation (timing, schedule, documents, message) as the patient sees it.
+function ConfirmationNote({ a }) {
+  if (!a.confirmed_at || a.status === "cancelled") return null;
+  return <div className="confirm-note" style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid var(--ok)", display: "grid", gap: 6 }}>
+    <b className="small" style={{ color: "var(--ok)" }}>Confirmed by {a.doctor_name || "your doctor"} · {fmtDate(a.appointment_date)}, {a.appointment_time}</b>
+    {a.schedule_notes && <div><span className="small muted">Schedule </span><span style={{ whiteSpace: "pre-wrap" }}>{a.schedule_notes}</span></div>}
+    {a.documents_to_bring && <div><span className="small muted">Please bring</span><ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{splitLines(a.documents_to_bring).map((x, i) => <li key={i}>{x}</li>)}</ul></div>}
+    {a.doctor_message && <div><span className="small muted">Message </span><span style={{ whiteSpace: "pre-wrap" }}>{a.doctor_message}</span></div>}
+  </div>;
+}
+
 function DoctorUpdate({ a }) {
   const rx = Array.isArray(a.prescription) ? a.prescription : [];
-  if (!a.diagnosis && !a.consultation_notes && !rx.length && !a.investigations && !a.follow_up) return null;
-  return <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "var(--surface-2)", display: "grid", gap: 6 }}>
+  if (!a.diagnosis && !a.consultation_notes && !rx.length && !a.investigations && !a.follow_up) return <ConfirmationNote a={a} />;
+  return <><ConfirmationNote a={a} /><div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: "var(--surface-2)", display: "grid", gap: 6 }}>
     <b className="small">From {a.doctor_name || "your doctor"}{a.doctor_updated_at ? ` · ${fmtDate(a.doctor_updated_at)}` : ""}</b>
     {a.diagnosis && <div><span className="small muted">Diagnosis </span>{a.diagnosis}</div>}
     {rx.length > 0 && <div><span className="small muted">Prescription</span>
@@ -3067,7 +3054,67 @@ function DoctorUpdate({ a }) {
     {a.investigations && <div><span className="small muted">Tests advised </span>{a.investigations}</div>}
     {a.consultation_notes && <div><span className="small muted">Doctor's notes </span><span style={{ whiteSpace: "pre-wrap" }}>{a.consultation_notes}</span></div>}
     {a.follow_up && <div><span className="small muted">Follow-up </span>{a.follow_up}</div>}
-  </div>;
+  </div></>;
+}
+
+/* Doctor accepts an appointment: final timing, schedule, documents and a message, sent to the patient by email + SMS. */
+const DOC_SUGGESTIONS = ["Previous prescriptions", "Recent blood test reports", "Scan / X-ray reports", "Discharge summary", "ID proof and ABHA card", "List of current medicines"];
+function toTimeInput(t) {
+  const m = String(t || "").trim().match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])?$/);
+  if (!m) return "";
+  let h = Number(m[1]); const ap = (m[3] || "").toLowerCase();
+  if (ap === "pm" && h < 12) h += 12; if (ap === "am" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
+function ConfirmAppointmentPanel({ base, a, onDone }) {
+  const already = !!a.confirmed_at && a.status === "confirmed";
+  const [open, setOpen] = useState(!already);
+  const [f, setF] = useState(() => ({
+    appointment_date: String(a.appointment_date || "").slice(0, 10), appointment_time: toTimeInput(a.appointment_time) || "10:00",
+    schedule_notes: a.schedule_notes || "", documents_to_bring: a.documents_to_bring || "", doctor_message: a.doctor_message || "",
+  }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [result, setResult] = useState(null);
+  const last = result?.notification || a.notification;
+  const addDoc = d => setF(x => ({ ...x, documents_to_bring: splitLines(x.documents_to_bring).includes(d) ? x.documents_to_bring : [x.documents_to_bring.trim(), d].filter(Boolean).join("\n") }));
+  const send = async () => {
+    setBusy(true); setErr(""); setResult(null);
+    try {
+      const r = await readJsonOrThrow(await apiFetch(`${base}/doctor/appointments/${a.id}/confirm`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }), "Could not confirm");
+      setResult(r); setOpen(false); onDone && onDone();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+  if (a.status === "cancelled" || a.status === "completed") return null;
+  const status = (k, label) => last?.[k] && <span className={last[k].sent ? "chip approved" : "chip pending"} title={last[k].error || ""}>{label}: {last[k].sent ? `sent${last[k].to ? ` to ${last[k].to}` : ""}` : (last[k].error || "not sent")}</span>;
+  return <section className="panel confirm-panel" style={{ margin: 0, display: "grid", gap: 12, borderLeft: "3px solid var(--brand)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <div><p className="n" style={{ margin: 0 }}>{already ? "APPOINTMENT CONFIRMED" : "NEW APPOINTMENT REQUEST"}</p>
+        <h3 style={{ margin: "6px 0 0" }}>{already ? `${fmtDate(a.appointment_date)}, ${a.appointment_time}` : "Accept and send timing to the patient"}</h3>
+        <p className="small muted" style={{ margin: "4px 0 0" }}>{already ? (last && (last.email?.sent || last.sms?.sent) ? `Sent to the patient by ${[last.email?.sent && "email", last.sms?.sent && "SMS"].filter(Boolean).join(" and ")}. They also see it on their Appointments page.` : "The patient sees these details on their Appointments page. Email/SMS could not be sent (see below).") : `Patient asked for ${fmtDate(a.appointment_date)}, ${a.appointment_time}. Set the final time, the schedule and the documents to bring.`}</p></div>
+      {already && !open && <button className="btn" onClick={() => setOpen(true)}>Change & notify again</button>}
+    </div>
+    {last && <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{status("email", "Email")}{status("sms", "SMS")}</div>}
+    {result && <p role="status" style={{ color: "var(--ok)", margin: 0 }}>{result.message}</p>}
+    {open && <>
+      <div className="grid2" style={{ gap: 12 }}>
+        <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="cf-date">Date</label><input id="cf-date" type="date" className="f" value={f.appointment_date} onChange={e => setF(x => ({ ...x, appointment_date: e.target.value }))} /></div>
+        <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="cf-time">Time</label><input id="cf-time" type="time" className="f" value={f.appointment_time} onChange={e => setF(x => ({ ...x, appointment_time: e.target.value }))} /></div>
+      </div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="cf-sched">Schedule</label><textarea id="cf-sched" className="f" rows="2" value={f.schedule_notes} onChange={e => setF(x => ({ ...x, schedule_notes: e.target.value }))} placeholder="e.g. Arrive 15 minutes early at reception, OPD room 4. Consultation about 20 minutes. Come fasting for blood tests." /></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="cf-docs">Documents to bring <span className="muted small">(one per line)</span></label>
+        <textarea id="cf-docs" className="f" rows="3" value={f.documents_to_bring} onChange={e => setF(x => ({ ...x, documents_to_bring: e.target.value }))} placeholder="e.g. Previous prescriptions" />
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>{DOC_SUGGESTIONS.map(d => <button type="button" key={d} className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => addDoc(d)}>+ {d}</button>)}</div></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="cf-msg">Message to the patient</label><textarea id="cf-msg" className="f" rows="3" value={f.doctor_message} onChange={e => setF(x => ({ ...x, doctor_message: e.target.value }))} placeholder="e.g. Please continue your current medicines until we meet." /></div>
+      {err && <p role="alert" style={{ color: "var(--crit)", margin: 0 }}>{err}</p>}
+      <div className="row">
+        <button className="btn pri" onClick={send} disabled={busy || !f.appointment_date || !f.appointment_time}>{busy ? "Sending…" : already ? "Update & notify patient" : "Accept & notify patient"}</button>
+        {already && <button className="btn" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>}
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>The patient gets an email and an SMS (to the phone number in their health profile) and sees everything on their Appointments page.</p>
+    </>}
+  </section>;
 }
 
 /* ---------------- Doctor: appointment queue + patient profile ---------------- */
@@ -3149,6 +3196,7 @@ function DoctorPatientProfile({ apiBaseUrl, appointmentId, onBack, onChanged, on
     </section>
     <Tabs label="Patient sections" value={tab} onChange={setTab} tabs={tabs} />
 
+    {tab === "consult" && <ConfirmAppointmentPanel key={a.id} base={base} a={a} onDone={async () => { await load(); onChanged && onChanged(); }} />}
     {tab === "consult" && <section className="panel" style={{ margin: 0, display: "grid", gap: 14 }}>
       <div className="grid2" style={{ gap: 14 }}>
         <div><p className="n" style={{ margin: 0 }}>REASON FOR CONSULTATION</p><p style={{ margin: "6px 0 0" }}>{a.reason || "—"}</p>
@@ -3169,7 +3217,6 @@ function DoctorPatientProfile({ apiBaseUrl, appointmentId, onBack, onChanged, on
       {note && <p role="status" style={{ color: "var(--ok)", margin: 0 }}>{note}</p>}
       <div className="row">
         <button className="btn pri" onClick={() => save()} disabled={busy}>{busy ? "Saving…" : "Save consultation"}</button>
-        {a.status === "pending" && <button className="btn" onClick={() => save({ status: "confirmed" })} disabled={busy}>Confirm appointment</button>}
         {a.status !== "completed" && <button className="btn" onClick={() => save({ status: "completed" })} disabled={busy}>Save & mark completed</button>}
       </div>
     </section>}

@@ -2240,7 +2240,8 @@ def list_patient_appointments(request: Request):
             SELECT a.id, a.provider_name, a.specialty, a.appointment_date, a.appointment_time,
                    a.reason, a.status, a.created_at, a.doctor_sub, a.abha_shared,
                    a.symptoms, a.diagnosis, a.consultation_notes, a.prescription, a.investigations,
-                   a.follow_up, a.doctor_updated_at, d.display_name AS doctor_name
+                   a.follow_up, a.doctor_updated_at, a.schedule_notes, a.documents_to_bring,
+                   a.doctor_message, a.confirmed_at, d.display_name AS doctor_name
             FROM aegiscare_patient_appointments a
             LEFT JOIN aegiscare_google_users d ON d.google_sub = a.doctor_sub
             WHERE a.google_sub=:sub ORDER BY a.created_at DESC LIMIT 50
@@ -2836,6 +2837,9 @@ def _ensure_care_tables():
             ("symptoms", "TEXT"), ("patient_snapshot", "JSONB"), ("diagnosis", "TEXT"),
             ("consultation_notes", "TEXT"), ("prescription", "JSONB"), ("investigations", "TEXT"),
             ("follow_up", "TEXT"), ("doctor_updated_at", "TIMESTAMPTZ"),
+            # Doctor's confirmation sent to the patient (email + SMS).
+            ("schedule_notes", "TEXT"), ("documents_to_bring", "TEXT"), ("doctor_message", "TEXT"),
+            ("confirmed_at", "TIMESTAMPTZ"), ("notification", "JSONB"),
         ]:
             conn.execute(_auth_text(f"ALTER TABLE aegiscare_patient_appointments ADD COLUMN IF NOT EXISTS {col} {ddl}"))
         conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_appt_patient ON aegiscare_patient_appointments (google_sub)"))
@@ -2925,7 +2929,7 @@ def _clean_prescription(items):
 def _appointment_public(row):
     d = dict(row)
     d["status"] = _norm_status(d.get("status"))
-    for k in ("prescription", "patient_snapshot"):
+    for k in ("prescription", "patient_snapshot", "notification"):
         if isinstance(d.get(k), str):
             try:
                 d[k] = _care_json.loads(d[k])
@@ -3194,7 +3198,8 @@ def cancel_patient_appointment(appointment_id: int, request: Request):
 _DOCTOR_APPT_COLUMNS = """
     a.id, a.google_sub, a.patient_name, a.provider_name, a.specialty, a.appointment_date, a.appointment_time,
     a.reason, a.symptoms, a.status, a.created_at, a.doctor_sub, a.abha_shared, a.patient_snapshot,
-    a.diagnosis, a.consultation_notes, a.prescription, a.investigations, a.follow_up, a.doctor_updated_at
+    a.diagnosis, a.consultation_notes, a.prescription, a.investigations, a.follow_up, a.doctor_updated_at,
+    a.schedule_notes, a.documents_to_bring, a.doctor_message, a.confirmed_at, a.notification
 """
 
 
@@ -3334,6 +3339,146 @@ def update_doctor_appointment(appointment_id: int, payload: dict, request: Reque
         """), params)
         row = _doctor_appointment(conn, appointment_id, scope)
     return {"appointment": _appointment_public(row), "message": "Appointment updated."}
+
+
+# ------------------------------------------------------------
+# Doctor confirms an appointment: final date/time, schedule, documents to
+# bring and a message. The patient sees it on their Appointments page and is
+# notified by email (Brevo, SMTP_FROM) and SMS (Brevo transactional SMS,
+# BREVO_SMS_SENDER). A failed notification never blocks the confirmation.
+# ------------------------------------------------------------
+SMS_DEFAULT_COUNTRY_CODE = re.sub(r"\D", "", os.getenv("SMS_DEFAULT_COUNTRY_CODE", "91")) or "91"
+
+
+def _sms_number(phone):
+    digits = re.sub(r"\D", "", str(phone or ""))
+    if str(phone or "").strip().startswith("+"):
+        return digits if 8 <= len(digits) <= 15 else None
+    digits = digits.lstrip("0")
+    if len(digits) == 10:
+        digits = SMS_DEFAULT_COUNTRY_CODE + digits
+    return digits if 11 <= len(digits) <= 15 else None
+
+
+def _mask(value, keep=3):
+    v = str(value or "")
+    if "@" in v:
+        name, _, dom = v.partition("@")
+        return (name[:2] + "***@" + dom) if name else v
+    return ("*" * max(len(v) - keep, 0)) + v[-keep:]
+
+
+def _send_brevo_sms(number: str, content: str):
+    api_key = os.getenv("BREVO_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("BREVO_API_KEY is not set on the server.")
+    sender = (os.getenv("BREVO_SMS_SENDER", "AegisCare").strip() or "AegisCare")[:11]
+    r = requests.post(
+        "https://api.brevo.com/v3/transactionalSMS/sms",
+        headers={"api-key": api_key, "accept": "application/json", "content-type": "application/json"},
+        json={"sender": sender, "recipient": number, "content": content, "type": "transactional"},
+        timeout=25,
+    )
+    if r.status_code >= 300:
+        raise RuntimeError(f"Brevo SMS {r.status_code}: {r.text[:200]}")
+
+
+def _notify_patient_confirmation(appt, patient_sub):
+    """Email + SMS the patient. Returns a small, masked delivery report."""
+    h = _health_row(patient_sub)
+    account_name, account_email = _account_name_email(patient_sub)
+    snap = appt.get("patient_snapshot") or {}
+    if isinstance(snap, str):
+        try:
+            snap = _care_json.loads(snap)
+        except ValueError:
+            snap = {}
+    name = h.get("full_name") or snap.get("name") or appt.get("patient_name") or account_name or "there"
+    email = (h.get("contact_email") or account_email or snap.get("email") or "").strip()
+    phone = h.get("phone") or snap.get("phone")
+    doctor = appt.get("doctor_name") or appt.get("provider_name") or "your doctor"
+    when = f"{appt['appointment_date']} at {appt['appointment_time']}"
+    lines = [f"Hello {name},", "", f"{doctor} has confirmed your appointment on {when}."]
+    if appt.get("provider_name") and appt.get("provider_name") != doctor:
+        lines.append(f"Clinic: {appt['provider_name']}")
+    if appt.get("schedule_notes"):
+        lines += ["", "Schedule:", appt["schedule_notes"]]
+    if appt.get("documents_to_bring"):
+        lines += ["", "Please bring:", appt["documents_to_bring"]]
+    if appt.get("doctor_message"):
+        lines += ["", f"Message from {doctor}:", appt["doctor_message"]]
+    lines += ["", "You can see these details any time on the Appointments page in AegisCare.", "", "AegisCare"]
+    report = {"email": {"sent": False}, "sms": {"sent": False}, "at": datetime.utcnow().isoformat() + "Z"}
+
+    sender = os.getenv("SMTP_FROM", "").strip()
+    if not email:
+        report["email"]["error"] = "Patient has no email address."
+    elif not sender:
+        report["email"]["error"] = "SMTP_FROM is not set on the server."
+    else:
+        try:
+            _send_via_brevo(email, f"Appointment confirmed: {when}", "\n".join(lines), sender)
+            report["email"] = {"sent": True, "to": _mask(email)}
+        except HTTPException as exc:
+            report["email"] = {"sent": False, "to": _mask(email), "error": str(exc.detail)[:200]}
+
+    number = _sms_number(phone)
+    if not number:
+        report["sms"]["error"] = "Patient has no valid phone number in their health profile."
+    else:
+        sms = f"AegisCare: {doctor} confirmed your appointment on {when}."
+        if appt.get("documents_to_bring"):
+            sms += " Bring: " + " ".join(str(appt["documents_to_bring"]).split())[:120] + "."
+        sms += " Details in your email and the AegisCare app."
+        try:
+            _send_brevo_sms(number, sms[:459])
+            report["sms"] = {"sent": True, "to": _mask(number)}
+        except Exception as exc:  # network or provider error; confirmation still stands
+            report["sms"] = {"sent": False, "to": _mask(number), "error": str(exc)[:200]}
+    return report
+
+
+@app.post("/api/doctor/appointments/{appointment_id}/confirm")
+def confirm_doctor_appointment(appointment_id: int, payload: dict, request: Request):
+    """Doctor accepts the request with final timing, schedule, documents and a message; patient is notified."""
+    _doctor_sub, scope = _doctor_scope(request)
+    _ensure_care_tables()
+    date_s = str(payload.get("appointment_date") or "").strip()
+    time_s = str(payload.get("appointment_time") or "").strip()[:20]
+    try:
+        appt_date = datetime.strptime(date_s, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Choose a valid appointment date.")
+    if not re.fullmatch(r"\d{1,2}:\d{2}(\s?[AaPp][Mm])?", time_s):
+        raise HTTPException(status_code=400, detail="Choose a valid appointment time.")
+    params = {
+        "id": appointment_id, "scope": scope, "d": appt_date, "t": time_s,
+        "sched": str(payload.get("schedule_notes") or "").strip()[:2000] or None,
+        "docs": str(payload.get("documents_to_bring") or "").strip()[:2000] or None,
+        "msg": str(payload.get("doctor_message") or "").strip()[:3000] or None,
+    }
+    with engine.begin() as conn:
+        current = _doctor_appointment(conn, appointment_id, scope)
+        if _norm_status(current["status"]) in ("cancelled", "completed"):
+            raise HTTPException(status_code=409, detail=f"This appointment is already {_norm_status(current['status'])}.")
+        conn.execute(_auth_text("""
+            UPDATE aegiscare_patient_appointments
+            SET status='confirmed', appointment_date=:d, appointment_time=:t, schedule_notes=:sched,
+                documents_to_bring=:docs, doctor_message=:msg, confirmed_at=NOW(), doctor_updated_at=NOW()
+            WHERE id=:id AND doctor_sub = ANY(:scope)
+        """), params)
+        row = dict(_doctor_appointment(conn, appointment_id, scope))
+        doc = conn.execute(_auth_text("SELECT display_name FROM aegiscare_google_users WHERE google_sub=:s"),
+                           {"s": row.get("doctor_sub")}).scalar()
+    row["doctor_name"] = doc
+    notification = _notify_patient_confirmation(row, row["google_sub"])
+    with engine.begin() as conn:
+        conn.execute(_auth_text("UPDATE aegiscare_patient_appointments SET notification=CAST(:n AS JSONB) WHERE id=:id"),
+                     {"n": _care_json.dumps(notification), "id": appointment_id})
+        row = _doctor_appointment(conn, appointment_id, scope)
+    sent = [k for k in ("email", "sms") if notification[k].get("sent")]
+    msg = "Appointment confirmed. " + (f"Patient notified by {' and '.join(sent)}." if sent else "Patient will see it in the app; email/SMS could not be sent.")
+    return {"appointment": _appointment_public(row), "notification": notification, "message": msg}
 
 
 @app.get("/api/doctor/appointments/{appointment_id}/reports/{report_id}/file")
