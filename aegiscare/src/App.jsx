@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 
 /* =====================================================================
@@ -3366,6 +3366,9 @@ function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefi
     apiFetch(`${base}/patient/abha`).then(r => r.ok ? r.json() : null).then(d => { if (d?.abha) setAbhaShareDefault(!!d.abha.share_with_doctors); }).catch(() => { });
   }, [base, hasAbha]);
   const [appointments, setAppointments] = useState([]);
+  const [apptMessages, setApptMessages] = useState([]);
+  const loadMessages = () => apiFetch(`${base}/patient/feedback`).then(r => r.ok ? r.json() : null).then(d => d && setApptMessages(d.items || [])).catch(() => { });
+  useEffect(() => { loadMessages(); }, [base]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(() => ({ ...blank, provider_name: prefill?.provider_name || "", specialty: prefill?.specialty || defaultSpecialty || "", appointment_time: TIME_PREF[prefs?.patientTimePref] || "" }));
   const [hospital] = useState(() => prefill ? { name: prefill.provider_name || "", mapsUrl: prefill.maps_url || "", city: prefill.city || "" } : null);
@@ -3527,7 +3530,7 @@ function PatientAppointments({ apiBaseUrl = API.baseUrl, go, prefill, clearPrefi
       </section>
       <section className="panel"><p className="n">YOUR APPOINTMENTS</p><h2 className="ph2">Recent requests</h2>
         {loading ? <p className="muted small" style={{ marginTop: 12 }}>Loading…</p>
-          : appointments.length ? <div style={{ display: "grid", gap: 12, marginTop: 12 }}>{appointments.map((a, ai) => <div key={a.id} className="pfx-item" style={{ "--i": ai, borderTop: "1px solid var(--line)", paddingTop: 12 }}><b>{a.provider_name}</b><div className="small muted">{a.specialty || "Doctor / clinic"} · {dateLabel(a.appointment_date)} · {a.appointment_time}</div><StatusChip s={a.status} /><ApptTrack status={a.status} />{a.reason && <p className="small muted">{a.reason}</p>}<DoctorUpdate a={a} />{["pending", "confirmed", "requested"].includes(a.status) && <button type="button" className="btn" style={{ padding: "2px 10px", marginTop: 6 }} onClick={() => cancelAppointment(a)}>Cancel appointment</button>}{a.doctor_sub && <div className="small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}><span className="muted">{a.abha_shared ? "ABHA shared with this doctor" : "ABHA not shared"}</span>{(a.abha_shared || hasAbha) && <button type="button" className="btn" style={{ padding: "2px 10px" }} onClick={() => toggleApptShare(a)}>{a.abha_shared ? "Stop sharing" : "Share ABHA"}</button>}</div>}</div>)}</div>
+          : appointments.length ? <div style={{ display: "grid", gap: 12, marginTop: 12 }}>{appointments.map((a, ai) => <div key={a.id} className="pfx-item" style={{ "--i": ai, borderTop: "1px solid var(--line)", paddingTop: 12 }}><b>{a.provider_name}</b><div className="small muted">{a.specialty || "Doctor / clinic"} · {dateLabel(a.appointment_date)} · {a.appointment_time}</div><StatusChip s={a.status} /><ApptTrack status={a.status} />{a.reason && <p className="small muted">{a.reason}</p>}<DoctorUpdate a={a} />{a.doctor_sub && <LinkedDoctorProfile base={base} doctorSub={a.doctor_sub} />}<AppointmentMessages base={base} a={a} items={apptMessages} onSent={loadMessages} />{["pending", "confirmed", "requested"].includes(a.status) && <button type="button" className="btn" style={{ padding: "2px 10px", marginTop: 6 }} onClick={() => cancelAppointment(a)}>Cancel appointment</button>}{a.doctor_sub && <div className="small" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}><span className="muted">{a.abha_shared ? "ABHA shared with this doctor" : "ABHA not shared"}</span>{(a.abha_shared || hasAbha) && <button type="button" className="btn" style={{ padding: "2px 10px" }} onClick={() => toggleApptShare(a)}>{a.abha_shared ? "Stop sharing" : "Share ABHA"}</button>}</div>}</div>)}</div>
             : <EmptyArt kind="calendar" title="No appointment requests yet" text="Choose a hospital from Find care to send your first request." />}
       </section>
     </div>
@@ -5146,6 +5149,318 @@ function OrgDashboard({ auth, reviews, go }) {
         {doctors.length ? <div style={{ display: "grid", gap: 10 }}>{doctors.map(d => <div key={d.name} className="rowline"><span>{d.name}</span><b>{d.count} review{d.count === 1 ? "" : "s"} · avg sev {d.avgSeverity}</b></div>)}</div> : <p className="muted">No doctors yet.</p>}
       </section>
     </div>}
+  </div>;
+}
+
+/* ======================= Doctor portal: own reviews, complaints & queries, public profile ======================= */
+const SENT_CHIP = { positive: "approved", negative: "rejected", neutral: "pending" };
+const SentChip = ({ s }) => <span className={"chip " + (SENT_CHIP[s] || "pending")}>{s || "neutral"}</span>;
+const StarRow = ({ v }) => { const n = Math.round(Number(v) || 0); return <span className="dp-stars" aria-label={`${n} out of 5 stars`}>{[1, 2, 3, 4, 5].map(i => <span key={i} className={i <= n ? "on" : ""}>★</span>)}</span>; };
+const DemoBadge = () => <span className="chip" title="Sample data so you can try every feature. Switch it off in My reviews.">Demo</span>;
+function useDoctorApi(apiBaseUrl, path) {
+  const base = apiBase(apiBaseUrl);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    try { setData(await readJsonOrThrow(await apiFetch(`${base}${path}`), "Could not load")); setErr(""); }
+    catch (e) { setErr(e.message); }
+  }, [base, path]);
+  useEffect(() => { load(); }, [load]);
+  return { base, data, setData, err, setErr, load };
+}
+const sendJson = async (url, method, body, fallback) => readJsonOrThrow(await apiFetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) }), fallback);
+
+function DemoNotice({ on, base, onChange }) {
+  const [busy, setBusy] = useState(false);
+  if (!on) return null;
+  const off = async () => { setBusy(true); try { await sendJson(`${base}/doctor/me/identity`, "PUT", { show_demo: false }, "Could not update"); onChange && onChange(); } finally { setBusy(false); } };
+  return <div className="panel dp-demo" role="note" style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", marginBottom: 16 }}>
+    <span className="small"><b>Demo data is on.</b> Sample reviews, complaints and queries are mixed in (marked <i>Demo</i>) so you can try every feature. Your real reviews appear alongside them.</span>
+    <button className="btn" onClick={off} disabled={busy}>{busy ? "Removing…" : "Remove demo data"}</button>
+  </div>;
+}
+
+function TrendBars({ trend = [] }) {
+  const max = Math.max(1, ...trend.map(t => t.positive + t.negative + t.neutral));
+  return <div className="dp-trend" role="img" aria-label="Reviews per month, positive, neutral and negative">
+    {trend.map(t => { const total = t.positive + t.neutral + t.negative; return <div key={t.month} className="dp-col">
+      <div className="dp-stack" style={{ height: `${(total / max) * 100}%` }} title={`${t.positive} positive · ${t.neutral} neutral · ${t.negative} negative`}>
+        {t.negative > 0 && <i className="neg" style={{ flex: t.negative }} />}{t.neutral > 0 && <i className="neu" style={{ flex: t.neutral }} />}{t.positive > 0 && <i className="pos" style={{ flex: t.positive }} />}
+      </div>
+      <span className="small muted">{new Date(t.month + "-01T00:00:00").toLocaleDateString([], { month: "short" })}</span>
+    </div>; })}
+  </div>;
+}
+
+function ReviewCard({ r, base, onChanged, compact = false }) {
+  const [reply, setReply] = useState(r.reply || r.suggested_reply || "");
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const saveReply = async () => { setBusy(true); setMsg(""); try { await sendJson(`${base}/doctor/me/reviews/${encodeURIComponent(r.key)}/reply`, "PUT", { reply }, "Could not save"); setMsg("Reply saved."); setOpen(false); onChanged && onChanged(); } catch (e) { setMsg(e.message); } finally { setBusy(false); } };
+  const notMe = async () => { setBusy(true); try { await sendJson(`${base}/doctor/me/reviews/${encodeURIComponent(r.key)}/hide`, "POST", undefined, "Could not hide"); onChanged && onChanged(); } catch (e) { setMsg(e.message); setBusy(false); } };
+  return <article className="dp-review">
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+      <div><StarRow v={r.rating} /> <b style={{ marginLeft: 6 }}>{r.reviewer || "Patient"}</b> <span className="small muted">· {fmtDate(r.date)}{r.clinic ? ` · ${r.clinic}` : ""}</span></div>
+      <div className="row" style={{ gap: 6 }}>{r.demo && <DemoBadge />}<SentChip s={r.sentiment} />{r.category && r.category !== "Uncategorised" && <span className="chip">{r.category}</span>}</div>
+    </div>
+    <p style={{ margin: "8px 0", lineHeight: 1.55 }}>{r.text}</p>
+    {!compact && <>
+      {r.analysed && r.summary && <p className="small muted" style={{ margin: "0 0 8px" }}><b>AI analysis:</b> {r.summary}{r.severity ? ` · severity ${r.severity}/5` : ""}</p>}
+      {r.reply && !open && <div className="dp-reply"><span className="small muted">Your reply</span><p style={{ margin: "4px 0 0" }}>{r.reply}</p></div>}
+      {open && <div className="field" style={{ margin: "8px 0 0" }}><label className="fl" htmlFor={`rp-${r.key}`}>Public reply {!r.reply && <span className="muted small">(suggested draft, edit before saving)</span>}</label>
+        <textarea id={`rp-${r.key}`} className="f" rows="3" value={reply} onChange={e => setReply(e.target.value)} /></div>}
+      <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        {open ? <><button className="btn pri" onClick={saveReply} disabled={busy}>Save reply</button><button className="btn" onClick={() => setOpen(false)} disabled={busy}>Cancel</button></>
+          : <button className="btn" onClick={() => setOpen(true)}>{r.reply ? "Edit reply" : "Reply"}</button>}
+        <button className="btn" onClick={notMe} disabled={busy} title="This review is not about you. It will be hidden from your portal.">Not me</button>
+        {msg && <span role="status" className="small" style={{ color: msg.endsWith(".") ? "var(--ok)" : "var(--crit)" }}>{msg}</span>}
+      </div>
+    </>}
+  </article>;
+}
+
+function DoctorHome({ apiBaseUrl, auth, go, onHprChange }) {
+  const { base, data: s, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/summary");
+  if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p><button className="btn" onClick={load}>Try again</button></section>;
+  if (!s) return <section className="panel"><p className="muted">Loading your dashboard…</p></section>;
+  const p = s.profile || {};
+  const total = s.counts.positive + s.counts.neutral + s.counts.negative;
+  const pct = k => total ? Math.round((s.counts[k] / total) * 100) : 0;
+  return <>
+    <PageHead title="My dashboard" sub={`Welcome, ${p.display_name || auth?.name || "Doctor"}. Your reviews, patients' messages and appointments in one place.`}>
+      <button className="btn" onClick={() => go("doctor-profile")}>Manage my profile</button>
+    </PageHead>
+    <DemoNotice on={s.show_demo} base={base} onChange={load} />
+    <div className="panel kpis">
+      <div className="kpi"><div className="l">Average rating</div><div className="v">{s.rating ?? "—"}<span className="small muted"> / 5</span></div><div className="d"><StarRow v={s.rating} /></div></div>
+      <div className="kpi"><div className="l">Reviews about you</div><div className="v"><KpiVal v={s.review_count} /></div><div className="d">{pct("positive")}% positive · {pct("negative")}% negative</div></div>
+      <div className="kpi"><div className="l">Open complaints</div><div className="v"><KpiVal v={s.open_complaints} /></div><div className="d">{s.negative_reviews} negative review{s.negative_reviews === 1 ? "" : "s"}</div></div>
+      <div className="kpi"><div className="l">Open queries</div><div className="v"><KpiVal v={s.open_queries} /></div><div className="d">{s.pending_appointments} pending appointment{s.pending_appointments === 1 ? "" : "s"}</div></div>
+    </div>
+    <div className="grid2" style={{ gap: 16, marginTop: 16 }}>
+      <section className="panel" style={{ margin: 0 }}><p className="n" style={{ margin: 0 }}>REVIEW TREND · LAST 6 MONTHS</p>
+        <TrendBars trend={s.trend} />
+        <div className="row small" style={{ gap: 14 }}><span><i className="dp-key pos" />Positive {s.counts.positive}</span><span><i className="dp-key neu" />Neutral {s.counts.neutral}</span><span><i className="dp-key neg" />Negative {s.counts.negative}</span></div></section>
+      <section className="panel" style={{ margin: 0 }}><p className="n" style={{ margin: 0 }}>WHAT PATIENTS RAISE MOST</p>
+        {s.top_concerns.length ? <div style={{ display: "grid", gap: 10, marginTop: 12 }}>{s.top_concerns.map(c => <div key={c.category}>
+          <div className="row" style={{ justifyContent: "space-between" }}><span>{c.category}</span><b>{c.count}</b></div>
+          <div className="dp-bar"><i style={{ width: `${(c.count / s.top_concerns[0].count) * 100}%` }} /></div></div>)}</div>
+          : <p className="small muted">No negative themes yet.</p>}
+        <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: "wrap" }}><button className="btn pri" onClick={() => go("doctor-inbox")}>Complaints & queries</button><button className="btn" onClick={() => go("doctor-reviews")}>All my reviews</button></div></section>
+    </div>
+    <DoctorQueueCard apiBaseUrl={apiBaseUrl} go={go} />
+    <section className="panel" style={{ marginTop: 0 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}><p className="n" style={{ margin: 0 }}>LATEST REVIEWS ABOUT YOU</p><button className="btn" onClick={() => go("doctor-reviews")}>View all</button></div>
+      {s.latest.length ? <div style={{ display: "grid", gap: 10, marginTop: 10 }}>{s.latest.map(r => <ReviewCard key={r.key} r={r} base={base} compact />)}</div>
+        : <p className="small muted">No reviews matched yet. Check the names in <b>My reviews → Matched on</b>.</p>}
+    </section>
+    <DoctorHprCard apiBaseUrl={apiBaseUrl} onHprChange={onHprChange} />
+  </>;
+}
+
+function MatchSettings({ base, identity, onSaved }) {
+  const [names, setNames] = useState((identity.name_variants || []).join("\n"));
+  const [clinics, setClinics] = useState((identity.clinics || []).join("\n"));
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const save = async () => { setBusy(true); setMsg(""); try { await sendJson(`${base}/doctor/me/identity`, "PUT", { name_variants: splitLines(names), clinics: splitLines(clinics) }, "Could not save"); setMsg("Saved. Reviews re-matched."); onSaved && onSaved(); } catch (e) { setMsg(e.message); } finally { setBusy(false); } };
+  return <div style={{ display: "grid", gap: 12 }}>
+    <p className="small muted" style={{ margin: 0 }}>Reviews whose doctor name matches one of these names are yours. Reviews of these clinics that mention your name also count. Use <b>Not me</b> on any wrong match.</p>
+    <div className="grid2" style={{ gap: 12 }}>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="mt-names">Names you are reviewed under (one per line)</label><textarea id="mt-names" className="f" rows="3" value={names} onChange={e => setNames(e.target.value)} placeholder={"Dr. Meera Rao\nMeera Rao"} /></div>
+      <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="mt-clinics">Clinics / hospitals (one per line)</label><textarea id="mt-clinics" className="f" rows="3" value={clinics} onChange={e => setClinics(e.target.value)} placeholder="City Hospital" /></div>
+    </div>
+    <div className="row" style={{ gap: 8 }}><button className="btn pri" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save & re-match"}</button>{msg && <span role="status" className="small" style={{ color: msg.startsWith("Saved") ? "var(--ok)" : "var(--crit)" }}>{msg}</span>}</div>
+  </div>;
+}
+
+function AddMissedReview({ base, onAdded }) {
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState("");
+  const search = async (e) => { e.preventDefault(); setErr(""); try { setItems((await readJsonOrThrow(await apiFetch(`${base}/doctor/me/review-search?q=${encodeURIComponent(q)}`), "Search failed")).items); } catch (x) { setErr(x.message); } };
+  const add = async (k) => { try { await sendJson(`${base}/doctor/me/reviews/${encodeURIComponent(k)}/add`, "POST", undefined, "Could not add"); setItems(it => it.filter(i => i.key !== k)); onAdded && onAdded(); } catch (x) { setErr(x.message); } };
+  return <div>
+    <form onSubmit={search} className="row" style={{ gap: 8 }}><input className="f" style={{ flex: 1, minWidth: 180 }} aria-label="Search all reviews" placeholder="Search by name, clinic or words in the review" value={q} onChange={e => setQ(e.target.value)} /><button className="btn" type="submit">Search</button></form>
+    {err && <p role="alert" className="small" style={{ color: "var(--crit)" }}>{err}</p>}
+    {items && (items.length ? <div style={{ display: "grid", gap: 8, marginTop: 10 }}>{items.map(i => <div key={i.key} className="dp-review" style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ flex: 1, minWidth: 200 }}><b>{i.doctor_name}</b> <span className="small muted">· {i.clinic} · {fmtDate(i.date)}</span><div className="small">{i.text}</div></div>
+      <button className="btn" onClick={() => add(i.key)}>Add to my reviews</button></div>)}</div> : <p className="small muted">No reviews found.</p>)}
+  </div>;
+}
+
+function DoctorReviews({ apiBaseUrl }) {
+  const { base, data, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/reviews");
+  const [sent, setSent] = useState("all");
+  const [cat, setCat] = useState("");
+  const [range, setRange] = useState("all");
+  const [panel, setPanel] = useState("");
+  if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
+  if (!data) return <section className="panel"><p className="muted">Loading your reviews…</p></section>;
+  const items = data.items;
+  const days = { "1m": 31, "3m": 92, "6m": 183, "1y": 366 }[range];
+  const since = days ? Date.now() - days * 864e5 : 0;
+  const cats = [...new Set(items.map(i => i.category).filter(c => c && c !== "Uncategorised"))].sort();
+  const shown = items.filter(i => (sent === "all" || i.sentiment === sent) && (!cat || i.category === cat) && (!since || (new Date(String(i.date).slice(0, 10) + "T00:00:00").getTime() || 0) >= since));
+  const count = k => items.filter(i => i.sentiment === k).length;
+  const toggleDemo = async () => { await sendJson(`${base}/doctor/me/identity`, "PUT", { show_demo: !data.show_demo }, "Could not update"); load(); };
+  const restore = async () => { await sendJson(`${base}/doctor/me/identity`, "PUT", { restore_hidden: true }, "Could not update"); load(); };
+  return <>
+    <PageHead title="My reviews" sub="Only reviews about you, from Google Maps and the imported dataset, with the AI analysis and your replies.">
+      <button className="btn" onClick={() => setPanel(p => p === "match" ? "" : "match")}>Matched on</button>
+      <button className="btn" onClick={() => setPanel(p => p === "add" ? "" : "add")}>Add a missed review</button>
+    </PageHead>
+    <DemoNotice on={data.show_demo} base={base} onChange={load} />
+    {panel === "match" && <section className="panel" style={{ marginBottom: 16 }}><p className="n" style={{ marginTop: 0 }}>MATCHED ON</p><MatchSettings base={base} identity={data.identity} onSaved={load} />
+      <div className="row small" style={{ gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+        {data.identity.hidden_count > 0 && <button className="btn" onClick={restore}>Show {data.identity.hidden_count} hidden review{data.identity.hidden_count === 1 ? "" : "s"} again</button>}
+        <button className="btn" onClick={toggleDemo}>{data.show_demo ? "Remove demo data" : "Show demo data"}</button></div></section>}
+    {panel === "add" && <section className="panel" style={{ marginBottom: 16 }}><p className="n" style={{ marginTop: 0 }}>ADD A REVIEW THAT WAS MISSED</p><AddMissedReview base={base} onAdded={load} /></section>}
+    <section className="panel">
+      <Tabs label="Sentiment" value={sent} onChange={setSent} tabs={[["all", "All", items.length], ["positive", "Positive", count("positive")], ["neutral", "Neutral", count("neutral")], ["negative", "Negative", count("negative")]]} />
+      <div className="row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <select className="f" aria-label="Category" value={cat} onChange={e => setCat(e.target.value)} style={{ maxWidth: 240 }}><option value="">All categories</option>{cats.map(c => <option key={c} value={c}>{c}</option>)}</select>
+        <select className="f" aria-label="Date range" value={range} onChange={e => setRange(e.target.value)} style={{ maxWidth: 200 }}>{Object.entries(TIME_RANGE_OPTIONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <span className="small muted" style={{ alignSelf: "center" }}>{shown.length} of {items.length}</span>
+      </div>
+      {shown.length ? <div style={{ display: "grid", gap: 12 }}>{shown.map(r => <ReviewCard key={r.key} r={r} base={base} onChanged={load} />)}</div>
+        : <EmptyArt kind="search" title="No reviews here" text={items.length ? "Try another filter." : "No reviews matched your names yet. Open “Matched on” to add the names patients use."} />}
+    </section>
+  </>;
+}
+
+function FeedbackItem({ f, base, onChanged }) {
+  const [reply, setReply] = useState(f.reply || "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const send = async (body) => {
+    setBusy(true); setMsg("");
+    try { const r = await sendJson(`${base}/doctor/me/feedback/${f.id}`, "PATCH", body, "Could not update"); setMsg(body.reply ? (r.email?.sent ? `Reply sent. Patient emailed (${r.email.to}).` : f.is_demo ? "Reply saved (demo item, no email)." : `Reply saved. Email not sent${r.email?.error ? `: ${r.email.error}` : ""}.`) : "Updated."); onChanged && onChanged(); }
+    catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  };
+  const tone = f.status === "open" ? "pending" : f.status === "resolved" ? "approved" : "";
+  return <article className="dp-review">
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+      <div><b>{f.subject || (f.kind === "query" ? "Question" : "Concern")}</b><div className="small muted">{f.patient_name || "Patient"} · {fmtDate(f.created_at)}{f.appointment_date ? ` · appointment ${fmtDate(f.appointment_date)}` : ""}</div></div>
+      <div className="row" style={{ gap: 6 }}>{f.is_demo && <DemoBadge />}<span className={"chip " + tone}>{f.status}</span></div>
+    </div>
+    <p style={{ margin: "8px 0", whiteSpace: "pre-wrap" }}>{f.message}</p>
+    {f.reply && <div className="dp-reply"><span className="small muted">Your reply{f.replied_at ? ` · ${fmtDate(f.replied_at)}` : ""}</span><p style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{f.reply}</p></div>}
+    {f.status !== "resolved" && <div className="field" style={{ margin: "10px 0 0" }}><label className="fl" htmlFor={`fb-${f.id}`}>{f.reply ? "Send another reply" : "Reply to the patient"}</label>
+      <textarea id={`fb-${f.id}`} className="f" rows="3" value={reply === f.reply ? "" : reply} onChange={e => setReply(e.target.value)} placeholder="The patient sees this in the app and gets it by email." /></div>}
+    <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+      {f.status !== "resolved" && <button className="btn pri" disabled={busy || !reply.trim() || reply === f.reply} onClick={() => send({ reply })}>Send reply</button>}
+      {f.status !== "resolved" ? <button className="btn" disabled={busy} onClick={() => send({ status: "resolved" })}>Mark resolved</button> : <button className="btn" disabled={busy} onClick={() => send({ status: "open" })}>Reopen</button>}
+      {msg && <span role="status" className="small" style={{ color: /Could not|not sent/.test(msg) ? "var(--crit)" : "var(--ok)" }}>{msg}</span>}
+    </div>
+  </article>;
+}
+
+function DoctorInbox({ apiBaseUrl, go }) {
+  const { base, data, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/feedback");
+  const [tab, setTab] = useState("complaint");
+  const [status, setStatus] = useState("open");
+  if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
+  if (!data) return <section className="panel"><p className="muted">Loading messages…</p></section>;
+  const list = data.items.filter(i => i.kind === tab && (status === "all" || i.status === status));
+  const openN = k => data.counts[k]?.open ?? 0;
+  return <>
+    <PageHead title="Complaints & queries" sub="Questions and concerns patients sent you, and negative reviews flagged by the AI." />
+    <section className="panel">
+      <Tabs label="Inbox" value={tab} onChange={setTab} tabs={[["complaint", "Complaints", openN("complaint")], ["query", "Queries", openN("query")], ["reviews", "From reviews", data.review_complaints.length]]} />
+      {tab !== "reviews" ? <>
+        <div className="seg" role="group" aria-label="Status" style={{ marginBottom: 12 }}>{[["open", "Open"], ["answered", "Answered"], ["resolved", "Resolved"], ["all", "All"]].map(([k, l]) => <button key={k} className={status === k ? "on" : ""} onClick={() => setStatus(k)}>{l} {k !== "all" && <span className="muted small">{data.counts[tab]?.[k] ?? 0}</span>}</button>)}</div>
+        {list.length ? <div style={{ display: "grid", gap: 12 }}>{list.map(f => <FeedbackItem key={f.id} f={f} base={base} onChanged={load} />)}</div>
+          : <EmptyArt kind="search" title={`No ${status === "all" ? "" : status + " "}${tab === "query" ? "queries" : "complaints"}`} text="Patients can send these from their Appointments page." />}
+      </> : <>
+        <p className="small muted" style={{ marginTop: 0 }}>Negative reviews about you. Reply publicly or mark wrong matches as <b>Not me</b>.</p>
+        {data.review_complaints.length ? <div style={{ display: "grid", gap: 12 }}>{data.review_complaints.map(r => <ReviewCard key={r.key} r={r} base={base} onChanged={load} />)}</div>
+          : <EmptyArt kind="search" title="No negative reviews" text="Nice. Nothing to act on here." />}
+      </>}
+    </section>
+  </>;
+}
+
+function DoctorPublicCard({ p, hpr }) {
+  if (!p) return null;
+  return <div className="dp-card">
+    <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+      {p.photo_url ? <img src={p.photo_url} alt="" referrerPolicy="no-referrer" className="dp-photo" /> : <div className="dp-photo dp-initials" aria-hidden="true">{String(p.display_name || "Dr").replace(/^dr\.?\s*/i, "").split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}</div>}
+      <div><h3 style={{ margin: 0 }}>{p.display_name}</h3><div className="small muted">{[p.specialty, p.qualifications].filter(Boolean).join(" · ")}</div>
+        {(hpr || p.has_hpr) && <span className="chip" style={{ marginTop: 6 }}>HPR added (self-declared)</span>}</div>
+    </div>
+    {p.about && <p style={{ margin: "12px 0 6px", lineHeight: 1.5 }}>{p.about}</p>}
+    <InfoRow label="Clinics">{p.clinics || null}</InfoRow>
+    <InfoRow label="Consultation">{[p.consult_days, p.consult_hours].filter(Boolean).join(", ") || null}</InfoRow>
+    <InfoRow label="Fee">{p.fee || null}</InfoRow>
+    <InfoRow label="Languages">{p.languages || null}</InfoRow>
+    {p.registration_no && <InfoRow label="Registration">{p.registration_no}</InfoRow>}
+  </div>;
+}
+
+const PROFILE_FIELDS = [["display_name", "Name shown to patients"], ["specialty", "Specialty"], ["qualifications", "Qualifications"], ["registration_no", "Medical registration no."], ["clinics", "Clinics / hospitals"], ["consult_days", "Consultation days"], ["consult_hours", "Consultation hours"], ["fee", "Consultation fee"], ["languages", "Languages"], ["photo_url", "Photo link (https://…)"]];
+function DoctorProfilePage({ apiBaseUrl, onHprChange }) {
+  const { base, data, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/profile");
+  const [f, setF] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (data) setF({ ...data.profile }); }, [data]);
+  if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
+  if (!data || !f) return <section className="panel"><p className="muted">Loading your profile…</p></section>;
+  const save = async () => { setBusy(true); setMsg(""); try { const body = {}; [...PROFILE_FIELDS.map(([k]) => k), "about", "visible"].forEach(k => { body[k] = f[k]; }); await sendJson(`${base}/doctor/me/profile`, "PUT", body, "Could not save"); setMsg("Profile saved."); load(); } catch (e) { setMsg(e.message); } finally { setBusy(false); } };
+  return <>
+    <PageHead title="My profile" sub="Your public profile. Patients see it when they find or book you." />
+    <div className="grid2 dp-profile" style={{ gap: 16 }}>
+      <section className="panel" style={{ margin: 0, display: "grid", gap: 12 }}>
+        <label className="row" style={{ gap: 10, alignItems: "center" }}><input type="checkbox" checked={!!f.visible} onChange={e => setF(x => ({ ...x, visible: e.target.checked }))} /><span><b>Visible to patients</b><span className="small muted"> · when off, patients don't see this profile</span></span></label>
+        {PROFILE_FIELDS.map(([k, l]) => <div className="field" style={{ margin: 0 }} key={k}><label className="fl" htmlFor={`pf-${k}`}>{l}</label><input id={`pf-${k}`} className="f" value={f[k] || ""} onChange={e => setF(x => ({ ...x, [k]: e.target.value }))} /></div>)}
+        <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="pf-about">About</label><textarea id="pf-about" className="f" rows="4" value={f.about || ""} onChange={e => setF(x => ({ ...x, about: e.target.value }))} /></div>
+        <div className="row" style={{ gap: 8 }}><button className="btn pri" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save profile"}</button>{msg && <span role="status" className="small" style={{ color: msg === "Profile saved." ? "var(--ok)" : "var(--crit)" }}>{msg}</span>}</div>
+      </section>
+      <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
+        <section className="panel" style={{ margin: 0 }}><p className="n" style={{ marginTop: 0 }}>PREVIEW · WHAT PATIENTS SEE</p>{f.visible ? <DoctorPublicCard p={f} hpr={data.hpr} /> : <p className="small muted">Hidden from patients.</p>}</section>
+        <DoctorHprCard apiBaseUrl={apiBaseUrl} onHprChange={onHprChange} />
+      </div>
+    </div>
+  </>;
+}
+
+/* Patient side: ask the appointment's doctor a question or raise a concern; see replies. */
+function AppointmentMessages({ base, a, items, onSent }) {
+  const [mode, setMode] = useState("");
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const mine = items.filter(i => i.appointment_id === a.id);
+  const send = async () => { setBusy(true); setErr(""); try { await sendJson(`${base}/patient/feedback`, "POST", { appointment_id: a.id, kind: mode, subject, message }, "Could not send"); setMode(""); setSubject(""); setMessage(""); onSent && onSent(); } catch (e) { setErr(e.message); } finally { setBusy(false); } };
+  if (!a.doctor_sub) return null;
+  return <div style={{ marginTop: 8 }}>
+    {mine.map(m => <div key={m.id} className="dp-reply" style={{ marginTop: 6 }}>
+      <span className="small muted">{m.kind === "query" ? "Your question" : "Your concern"} · {fmtDate(m.created_at)} · {m.status}</span>
+      <p style={{ margin: "2px 0 0" }}>{m.subject ? <b>{m.subject}: </b> : null}{m.message}</p>
+      {m.reply ? <p style={{ margin: "6px 0 0" }}><span className="small muted">Doctor's reply: </span>{m.reply}</p> : <p className="small muted" style={{ margin: "4px 0 0" }}>Waiting for the doctor's reply.</p>}
+    </div>)}
+    {!mode ? <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+      <button type="button" className="btn" style={{ padding: "2px 10px" }} onClick={() => setMode("query")}>Ask a question</button>
+      <button type="button" className="btn" style={{ padding: "2px 10px" }} onClick={() => setMode("complaint")}>Raise a concern</button>
+    </div> : <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+      <input className="f" aria-label="Subject" placeholder={mode === "query" ? "Subject, e.g. Fasting before tests" : "Subject, e.g. Waiting time"} value={subject} onChange={e => setSubject(e.target.value)} />
+      <textarea className="f" rows="3" aria-label="Message" placeholder={mode === "query" ? "Your question for the doctor" : "Tell the doctor what went wrong"} value={message} onChange={e => setMessage(e.target.value)} />
+      {err && <p role="alert" className="small" style={{ color: "var(--crit)", margin: 0 }}>{err}</p>}
+      <div className="row" style={{ gap: 6 }}><button type="button" className="btn pri" disabled={busy || message.trim().length < 5} onClick={send}>{busy ? "Sending…" : "Send to doctor"}</button><button type="button" className="btn" onClick={() => setMode("")}>Cancel</button></div>
+    </div>}
+  </div>;
+}
+
+function LinkedDoctorProfile({ base, doctorSub }) {
+  const [p, setP] = useState(undefined);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (open && p === undefined) apiFetch(`${base}/doctors/${encodeURIComponent(doctorSub)}/profile`).then(r => r.ok ? r.json() : { profile: null }).then(d => setP(d.profile)).catch(() => setP(null)); }, [open, p, base, doctorSub]);
+  return <div style={{ marginTop: 6 }}>
+    <button type="button" className="btn" style={{ padding: "2px 10px" }} onClick={() => setOpen(o => !o)}>{open ? "Hide doctor profile" : "View doctor profile"}</button>
+    {open && (p === undefined ? <p className="small muted">Loading…</p> : p ? <div style={{ marginTop: 8 }}><DoctorPublicCard p={p} /></div> : <p className="small muted">This doctor has not published a profile yet.</p>)}
   </div>;
 }
 
@@ -6938,7 +7253,11 @@ function App() {
   const fullAccess = hasFullAccess(googleAuth);
   const setAbhaFlag = (v) => setGoogleAuth(a => ({ ...a, hasAbha: !!v }));
   const setHprFlag = (v) => setGoogleAuth(a => ({ ...a, hasHpr: !!v }));
-  const dashboardView = googleAuth.role === "patient"
+  // Hospital-wide pages are for the Organisation login; a doctor lands on their own reviews instead.
+  useEffect(() => { if (googleAuth.role === "doctor" && ["reviews", "investigation", "action", "reports", "approval"].includes(page)) setPage("doctor-reviews"); }, [page, googleAuth.role]);
+  const dashboardView = googleAuth.role === "doctor"
+    ? <DoctorHome apiBaseUrl={settings.api} auth={googleAuth} go={setPage} onHprChange={setHprFlag} />
+    : googleAuth.role === "patient"
     ? <PatientDashboard auth={googleAuth} apiBaseUrl={settings.api} go={setPage} onChooseProvider={chooseProvider} prefs={settings} onAbhaChange={setAbhaFlag} />
     : (googleAuth.role === "organization" && !fullAccess)
       ? <OrgDashboard auth={googleAuth} reviews={reviews} go={setPage} />
@@ -6951,6 +7270,8 @@ function App() {
     reports: <Reports reviews={reviews} />, "my-patients": googleAuth.role === "doctor" ? <DoctorAppointments apiBaseUrl={settings.api} onHprChange={setHprFlag} /> : dashboardView, settings: googleAuth.role === "patient"
       ? <PatientSettings auth={googleAuth} apiBaseUrl={settings.api} settings={settings} setSettings={setSettings} toast={setToastMsg} go={setPage} onLogout={logout} onProfileSaved={d => { setGoogleAuth(mapAuth(d)); setToastMsg("Profile saved"); }} />
       : <Settings settings={settings} setSettings={setSettings} toast={setToastMsg} />, about: <About go={setPage} />, contact: <Contact apiBaseUrl={settings.api} auth={googleAuth} />,
+    "doctor-reviews": <DoctorReviews apiBaseUrl={settings.api} />, "doctor-inbox": <DoctorInbox apiBaseUrl={settings.api} go={setPage} />,
+    "doctor-profile": <DoctorProfilePage apiBaseUrl={settings.api} onHprChange={setHprFlag} />,
   }[page];
 
   return <>
@@ -6977,7 +7298,10 @@ function App() {
           {inApp && <nav className="top-nav" aria-label="Main navigation">
             {(googleAuth.role === "patient"
               ? [["patient-dashboard", "My care", "dash"], ["patient-appointments", "Appointments", "check"], ["patient-records", "My records", "file"], ["patient-glow", "Prep & Perk", "glow"], ["patient-activities", "Activities", "pulse"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
-              // Doctors and organisations: the same sections their sidebar had, now in the header.
+              // Doctors: their own portal only. Hospital-wide pages belong to the Organisation login.
+              : googleAuth.role === "doctor"
+              ? [["dashboard", "My dashboard", "dash"], ["doctor-reviews", "My reviews", "reviews"], ["doctor-inbox", "Complaints & queries", "approval"], ["my-patients", "My patients", "user"], ["doctor-profile", "My profile", "file"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
+              // Organisations: the same sections their sidebar had, now in the header.
               : NAV.flatMap(([, items]) => items)
                 .filter(([k]) => k !== "home" && !(googleAuth.role === "doctor" && k === "investigation"))
                 .flatMap(item => item[0] === "try" && googleAuth.role === "doctor" ? [item, ["my-patients", "My patients", "user"]] : [item])
@@ -7029,11 +7353,9 @@ function App() {
       {showSide && <SideNav page={page} go={setPage} waiting={waiting} role={googleAuth.role} />}
       <main key={fx ? page : "static"} className={"main" + (page === "home" ? " landing-main" : "")}>
         {apiError && page !== "settings" && page !== "login" && page !== "onboarding" && <div className="panel" role="status" style={{ marginBottom: 16, borderColor: "var(--danger, #bd7777)" }}><b>Backend connection issue</b><p className="small" style={{ margin: "6px 0 0" }}>{apiError}. Check Settings → API connection and verify the dashboard, reviews, investigations, and action-plans endpoints.</p><button className="btn" style={{ marginTop: 10 }} onClick={() => setPage("settings")}>Open API settings</button></div>}
-        {fx && page === "dashboard" && (googleAuth.role === "doctor" || googleAuth.role === "organization") && <AttentionToday name={googleAuth.name} open={open} go={setPage}
+        {fx && page === "dashboard" && googleAuth.role === "organization" && <AttentionToday name={googleAuth.name} open={open} go={setPage}
           reviews={googleAuth.role === "organization" && !fullAccess ? scopeReviewsToOrg(googleAuth.profile?.org_name, reviews).scoped : reviews} />}
-        {fx && page === "dashboard" && (googleAuth.role === "doctor" || googleAuth.role === "organization") && <LiveFeed reviews={reviews} onOpen={() => setPage("reviews")} />}
-        {page === "dashboard" && googleAuth.role === "doctor" && <DoctorQueueCard apiBaseUrl={settings.api} go={setPage} />}
-        {page === "dashboard" && googleAuth.role === "doctor" && <DoctorHprCard apiBaseUrl={settings.api} onHprChange={setHprFlag} />}
+        {fx && page === "dashboard" && googleAuth.role === "organization" && <LiveFeed reviews={reviews} onOpen={() => setPage("reviews")} />}
         {view}
       </main>
       </div>

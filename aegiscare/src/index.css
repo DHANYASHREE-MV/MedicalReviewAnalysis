@@ -1589,3 +1589,24 @@ body { background: var(--bg); }
   .hero-features { justify-content: flex-start; width: 100%; }
   .hero-features > div { flex: 1 1 40%; }
 }
+
+/* ---------- Doctor portal ---------- */
+.dp-stars { color: color-mix(in srgb, var(--ink, #141110) 22%, transparent); letter-spacing: 1px; }
+.dp-stars .on { color: var(--brand); }
+.dp-review { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surface); }
+.dp-reply { border-left: 3px solid var(--brand); padding: 6px 10px; background: var(--surface-2); border-radius: 0 8px 8px 0; margin-top: 6px; }
+.dp-trend { display: flex; align-items: flex-end; gap: 12px; height: 160px; margin: 14px 0 10px; }
+.dp-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; }
+.dp-stack { width: 100%; max-width: 44px; min-height: 2px; display: flex; flex-direction: column; border-radius: 6px 6px 0 0; overflow: hidden; transition: height .6s ease; }
+.dp-stack i, .dp-key { display: block; }
+.dp-stack i.pos, .dp-key.pos { background: var(--ok, #5d7a3e); }
+.dp-stack i.neu, .dp-key.neu { background: color-mix(in srgb, var(--ink, #141110) 30%, transparent); }
+.dp-stack i.neg, .dp-key.neg { background: var(--brand); }
+.dp-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.dp-bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.dp-bar i { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
+.dp-card { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: var(--surface); }
+.dp-photo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; flex: none; }
+.dp-initials { display: grid; place-items: center; background: var(--brand); color: var(--brand-ink, #fff); font-family: "Anton", Impact, sans-serif; font-size: 24px; }
+.dp-demo { border-left: 3px solid var(--brand); }
+@media (max-width: 760px) { .dp-profile { grid-template-columns: 1fr !important; } .dp-trend { gap: 6px; } }

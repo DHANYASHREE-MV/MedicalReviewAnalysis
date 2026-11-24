@@ -4310,3 +4310,596 @@ def patient_hospital_availability(payload: HospitalAvailabilityRequest, request:
     out.update({"doctors": doctors, "doctors_specialty_filtered": specialty_filtered,
                 "doctors_found_total": len(doctors_all), "cached": cached})
     return out
+
+
+# ============================================================
+# DOCTOR PORTAL: a doctor's own reviews, complaints/queries and public profile.
+#   * Reviews are linked by the doctor's claimed names and clinics (server-side match).
+#   * New doctors get demo data (demo reviews, complaints, queries, filled profile)
+#     until they switch it off. Demo rows never touch the hospital-wide tables.
+#   * Patients can ask a question / raise a concern about an appointment's doctor.
+# ============================================================
+DOCTOR_FEEDBACK_KINDS = ("query", "complaint")
+DOCTOR_FEEDBACK_STATUSES = ("open", "answered", "resolved")
+_PROFILE_TEXT_FIELDS = {
+    "display_name": 120, "photo_url": 500, "specialty": 120, "qualifications": 300, "registration_no": 80,
+    "clinics": 600, "consult_days": 120, "consult_hours": 120, "fee": 60, "languages": 200, "about": 2000,
+}
+
+
+def _ensure_doctor_portal_tables():
+    _ensure_care_tables()
+    _ensure_abha_tables()
+    with engine.begin() as conn:
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_doctor_identity (
+                doctor_sub TEXT PRIMARY KEY,
+                name_variants JSONB NOT NULL DEFAULT '[]'::jsonb,
+                clinics JSONB NOT NULL DEFAULT '[]'::jsonb,
+                hidden_reviews JSONB NOT NULL DEFAULT '[]'::jsonb,
+                added_reviews JSONB NOT NULL DEFAULT '[]'::jsonb,
+                show_demo BOOLEAN NOT NULL DEFAULT TRUE,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        cols = ", ".join(f"{c} TEXT" for c in _PROFILE_TEXT_FIELDS)
+        conn.execute(_auth_text(f"""
+            CREATE TABLE IF NOT EXISTS aegiscare_doctor_public_profile (
+                doctor_sub TEXT PRIMARY KEY, {cols},
+                visible BOOLEAN NOT NULL DEFAULT TRUE,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_doctor_review_replies (
+                doctor_sub TEXT NOT NULL,
+                review_key TEXT NOT NULL,
+                reply TEXT NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (doctor_sub, review_key)
+            )
+        """))
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_doctor_feedback (
+                id BIGSERIAL PRIMARY KEY,
+                doctor_sub TEXT NOT NULL,
+                patient_sub TEXT,
+                patient_name TEXT,
+                appointment_id BIGINT,
+                kind TEXT NOT NULL,
+                subject TEXT,
+                message TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                reply TEXT,
+                replied_at TIMESTAMPTZ,
+                is_demo BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_feedback_doc ON aegiscare_doctor_feedback (doctor_sub)"))
+        conn.execute(_auth_text("CREATE INDEX IF NOT EXISTS idx_aegiscare_feedback_pat ON aegiscare_doctor_feedback (patient_sub)"))
+
+
+_ensure_doctor_portal_tables = _run_once(_ensure_doctor_portal_tables)
+
+
+def _name_key(value):
+    v = re.sub(r"^\s*(dr|doctor|prof)\b\.?", "", str(value or "").lower())
+    return re.sub(r"[^a-z0-9]", "", v)
+
+
+def _clean_list(values, max_items=10, max_len=120):
+    out, seen = [], set()
+    for v in values or []:
+        s = " ".join(str(v or "").split())[:max_len]
+        if s and s.lower() not in seen:
+            seen.add(s.lower()); out.append(s)
+    return out[:max_items]
+
+
+def _jsonish(value, default):
+    if isinstance(value, str):
+        try:
+            return _care_json.loads(value)
+        except ValueError:
+            return default
+    return value if value is not None else default
+
+
+def _seed_demo_feedback(conn, doctor_sub):
+    demo = [
+        ("query", "Fasting before blood tests?", "Should I come fasting for the blood tests you advised? My appointment is in the morning.", "Riya S.", "answered",
+         "Yes, please fast for 10–12 hours (water is fine) and bring your previous reports."),
+        ("query", "Can I continue my BP tablets?", "I was prescribed a new medicine. Can I continue my regular BP tablet alongside it?", "Arun K.", "open", None),
+        ("complaint", "Long waiting time", "I waited almost 90 minutes past my appointment time and no one told us about the delay.", "Meena P.", "open", None),
+        ("complaint", "Billing not explained", "I was charged for a test I did not understand was needed. Please explain the charges.", "Faizal R.", "resolved",
+         "Thank you for flagging this. The test was ECG, needed before the procedure. Our billing desk has shared an itemised bill and refunded the duplicate charge."),
+    ]
+    for i, (kind, subj, msg, pname, status, reply) in enumerate(demo):
+        conn.execute(_auth_text("""
+            INSERT INTO aegiscare_doctor_feedback (doctor_sub, patient_name, kind, subject, message, status, reply, replied_at, is_demo, created_at)
+            VALUES (:d, :pn, :k, :sub, :m, :st, :r, CASE WHEN CAST(:r AS TEXT) IS NULL THEN NULL ELSE NOW() END, TRUE, NOW() - make_interval(days => :ago))
+        """), {"d": doctor_sub, "pn": pname, "k": kind, "sub": subj, "m": msg, "st": status, "r": reply, "ago": 2 + i * 4})
+
+
+def _doctor_seed(conn, doctor_sub):
+    """First visit: claim the account name, fill the public profile and add demo complaints/queries."""
+    row = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_identity WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings().first()
+    if row:
+        return dict(row)
+    name, _email = _account_name_email(doctor_sub)
+    prof = _profile_for_sub(doctor_sub)
+    name = name or "Doctor"
+    bare = re.sub(r"^\s*(dr|doctor)\b\.?\s*", "", name, flags=re.I).strip() or name
+    variants = _clean_list([f"Dr. {bare}", bare])
+    clinic = prof.get("org_name") or "AegisCare Partner Clinic"
+    city = prof.get("city") or "Bengaluru"
+    conn.execute(_auth_text("""
+        INSERT INTO aegiscare_doctor_identity (doctor_sub, name_variants, clinics)
+        VALUES (:s, CAST(:v AS JSONB), CAST(:c AS JSONB)) ON CONFLICT (doctor_sub) DO NOTHING
+    """), {"s": doctor_sub, "v": _care_json.dumps(variants), "c": _care_json.dumps([clinic])})
+    spec = prof.get("specialty") or "General Medicine"
+    conn.execute(_auth_text("""
+        INSERT INTO aegiscare_doctor_public_profile
+          (doctor_sub, display_name, specialty, qualifications, registration_no, clinics, consult_days,
+           consult_hours, fee, languages, about, visible)
+        VALUES (:s, :n, :sp, :q, '', :cl, 'Mon – Sat', '10:00 – 13:30, 17:00 – 20:00', '₹600', 'English, Hindi, Kannada', :ab, TRUE)
+        ON CONFLICT (doctor_sub) DO NOTHING
+    """), {"s": doctor_sub, "n": f"Dr. {bare}", "sp": spec, "q": f"MBBS, MD ({spec})",
+           "cl": f"{clinic}, {city}",
+           "ab": f"{spec} consultant with over 10 years of experience. I focus on clear explanations, "
+                 f"evidence-based treatment and follow-up care. Demo profile: edit any field to make it yours."})
+    _seed_demo_feedback(conn, doctor_sub)
+    return dict(conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_identity WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings().first())
+
+
+_DEMO_REVIEWS = [
+    (5, "Very patient and explained my reports clearly. Felt listened to for the first time.", "positive", "Communication", 1, 6),
+    (4, "Good diagnosis and the medicines worked within a week. Clinic was a bit crowded.", "positive", "Treatment Outcome", 1, 14),
+    (2, "Had to wait over an hour even with an appointment. Doctor was good but the delay was frustrating.", "negative", "Wait Time", 3, 21),
+    (5, "Calm, kind and thorough. Followed up personally after my tests.", "positive", "Bedside Manner", 1, 35),
+    (1, "Consultation lasted less than five minutes and my questions were not answered.", "negative", "Communication", 4, 48),
+    (3, "Treatment is fine but the billing counter did not explain the charges.", "neutral", "Billing", 2, 63),
+    (4, "Clear instructions and a written plan. Reception staff could be friendlier.", "positive", "Staff Behaviour", 1, 80),
+    (2, "Prescribed many tests; not sure all were needed. Would like clearer reasons.", "negative", "Treatment Outcome", 3, 101),
+    (5, "Excellent with children. My son was not scared at all.", "positive", "Bedside Manner", 1, 128),
+    (4, "Online booking worked well and the visit started on time.", "positive", "Appointments", 1, 152),
+]
+_DEMO_REVIEWERS = ["Kavya R.", "Suresh M.", "Lakshmi N.", "Imran A.", "Deepa V.", "Rahul G.", "Anita J.", "Prakash B.", "Sana K.", "Vikram T."]
+
+
+def _sentiment_from(rating, triage_sentiment=None):
+    s = str(triage_sentiment or "").lower()
+    if s in ("positive", "negative", "neutral"):
+        return s
+    try:
+        r = float(rating)
+    except (TypeError, ValueError):
+        return "neutral"
+    return "positive" if r >= 4 else "negative" if r <= 2 else "neutral"
+
+
+def _suggest_reply(sentiment, category, first_name="there"):
+    if sentiment == "positive":
+        return f"Thank you for your kind words. I'm glad the visit helped, and I look forward to seeing you at your follow-up."
+    if sentiment == "negative":
+        topic = (category or "your experience").lower()
+        return (f"I'm sorry about {topic} during your visit. This is not the experience we want for you. "
+                f"Please contact the clinic so we can look into it personally and make it right.")
+    return "Thank you for your feedback. We'll use it to make the next visit smoother."
+
+
+def _doctor_reviews(conn, doctor_sub, ident):
+    """Real reviews matched to the doctor's claimed names/clinics, plus demo reviews while enabled."""
+    variants = _clean_list(_jsonish(ident.get("name_variants"), []))
+    clinics = _clean_list(_jsonish(ident.get("clinics"), []))
+    hidden = set(str(x) for x in _jsonish(ident.get("hidden_reviews"), []))
+    added = [str(x) for x in _jsonish(ident.get("added_reviews"), [])]
+    keys = sorted({k for k in (_name_key(v) for v in variants) if len(k) >= 5})
+    words = sorted({re.sub(r"^\s*(dr|doctor)\b\.?\s*", "", v, flags=re.I).strip() for v in variants}, key=len, reverse=True)
+    words = [w for w in words if len(w) >= 4][:5]
+    params, conds = {}, []
+    for i, k in enumerate(keys[:6]):
+        params[f"k{i}"] = f"%{k}%"
+        conds.append(f"{_SQL_NAME_KEY.format(col='r.doctor_name')} LIKE :k{i}")
+    if clinics and words:
+        cl = []
+        for i, c in enumerate(clinics[:6]):
+            params[f"c{i}"] = f"%{c}%"; cl.append(f"r.clinic___hospital ILIKE :c{i}")
+        wl = []
+        for i, w in enumerate(words):
+            params[f"w{i}"] = f"%{w}%"; wl.append(f"r.review_text ILIKE :w{i}")
+        conds.append(f"(({' OR '.join(cl)}) AND ({' OR '.join(wl)}))")
+    if added:
+        params["added"] = added
+        conds.append("CAST(r.review_id AS TEXT) = ANY(:added)")
+    rows = []
+    if conds:
+        try:
+            with conn.begin_nested():  # a failure here must not abort the rest of the request
+                rows = conn.execute(_auth_text(f"""
+                SELECT r.review_id, r.doctor_name, r.specialty, r.clinic___hospital, r.overall_rating, r.review_text,
+                       r.reviewer_name, r.time_of_review, t.sentiment, t.severity, t.category, t.summary
+                FROM reviews r LEFT JOIN review_triage t ON t.review_id = r.review_id
+                WHERE {' OR '.join(conds)}
+                ORDER BY r.review_id DESC LIMIT 300
+                """), params).mappings().all()
+        except Exception as exc:  # e.g. no reviews table on a fresh database
+            print(f"Doctor review match skipped: {exc}")
+            rows = []
+    replies = {r["review_key"]: r["reply"] for r in conn.execute(_auth_text(
+        "SELECT review_key, reply FROM aegiscare_doctor_review_replies WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings()}
+    items = []
+    for r in rows:
+        key = str(r["review_id"])
+        if key in hidden:
+            continue
+        sent = _sentiment_from(r["overall_rating"], r["sentiment"])
+        cat = r["category"] or "Uncategorised"
+        items.append({
+            "key": key, "demo": False, "doctor_name": r["doctor_name"], "clinic": r["clinic___hospital"],
+            "rating": r["overall_rating"], "text": r["review_text"], "reviewer": r["reviewer_name"],
+            "date": str(r["time_of_review"] or ""), "sentiment": sent, "category": cat,
+            "severity": r["severity"], "summary": r["summary"], "analysed": r["sentiment"] is not None,
+            "reply": replies.get(key), "suggested_reply": _suggest_reply(sent, cat),
+        })
+    if ident.get("show_demo", True):
+        clinic = clinics[0] if clinics else "AegisCare Partner Clinic"
+        name = variants[0] if variants else "Doctor"
+        today = _care_date.today()
+        for i, (rating, text_, sent, cat, sev, ago) in enumerate(_DEMO_REVIEWS):
+            key = f"demo-{i + 1}"
+            if key in hidden:
+                continue
+            items.append({
+                "key": key, "demo": True, "doctor_name": name, "clinic": clinic, "rating": rating, "text": text_,
+                "reviewer": _DEMO_REVIEWERS[i], "date": (today - timedelta(days=ago)).isoformat(),
+                "sentiment": sent, "category": cat, "severity": sev,
+                "summary": f"{sent.capitalize()} feedback about {cat.lower()}.", "analysed": True,
+                "reply": replies.get(key), "suggested_reply": _suggest_reply(sent, cat),
+            })
+    return items
+
+
+def _review_date(value):
+    s = str(value or "")[:10]
+    try:
+        return _care_date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _doctor_ctx(request: Request):
+    doctor_sub, scope = _doctor_scope(request)
+    _ensure_doctor_portal_tables()
+    with engine.begin() as conn:
+        ident = _doctor_seed(conn, doctor_sub)
+    return doctor_sub, scope, ident
+
+
+def _feedback_public(row):
+    d = dict(row)
+    d.pop("patient_sub", None)
+    return d
+
+
+@app.get("/api/doctor/me/summary")
+def doctor_portal_summary(request: Request):
+    doctor_sub, scope, ident = _doctor_ctx(request)
+    with engine.begin() as conn:
+        items = _doctor_reviews(conn, doctor_sub, ident)
+        open_fb = conn.execute(_auth_text("""
+            SELECT kind, COUNT(*) FROM aegiscare_doctor_feedback
+            WHERE doctor_sub = ANY(:scope) AND status='open' AND (is_demo=FALSE OR doctor_sub=:me) GROUP BY kind
+        """), {"scope": scope, "me": doctor_sub}).all()
+        pending = conn.execute(_auth_text("""
+            SELECT COUNT(*) FROM aegiscare_patient_appointments
+            WHERE doctor_sub = ANY(:scope) AND COALESCE(NULLIF(status,''),'pending') IN ('pending','requested')
+        """), {"scope": scope}).scalar() or 0
+        prof = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_public_profile WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings().first()
+    ratings = [float(i["rating"]) for i in items if str(i.get("rating") or "").replace(".", "", 1).isdigit()]
+    counts = {s: sum(1 for i in items if i["sentiment"] == s) for s in ("positive", "neutral", "negative")}
+    today = _care_date.today()
+    months = []
+    for back in range(5, -1, -1):
+        y, m = today.year, today.month - back
+        while m <= 0:
+            m += 12; y -= 1
+        months.append((y, m))
+    trend = []
+    for y, m in months:
+        bucket = [i for i in items if (_review_date(i["date"]) or _care_date(1900, 1, 1)).timetuple()[:2] == (y, m)]
+        trend.append({"month": f"{y}-{m:02d}", "positive": sum(1 for i in bucket if i["sentiment"] == "positive"),
+                      "negative": sum(1 for i in bucket if i["sentiment"] == "negative"),
+                      "neutral": sum(1 for i in bucket if i["sentiment"] == "neutral")})
+    cats = {}
+    for i in items:
+        if i["sentiment"] == "negative":
+            cats[i["category"]] = cats.get(i["category"], 0) + 1
+    latest = sorted(items, key=lambda i: _review_date(i["date"]) or _care_date(1900, 1, 1), reverse=True)[:5]
+    fb = dict(open_fb)
+    return {
+        "rating": round(sum(ratings) / len(ratings), 1) if ratings else None, "review_count": len(items),
+        "real_review_count": sum(1 for i in items if not i["demo"]), "counts": counts, "trend": trend,
+        "top_concerns": sorted(({"category": k, "count": v} for k, v in cats.items()), key=lambda x: -x["count"])[:4],
+        "open_complaints": int(fb.get("complaint", 0)), "open_queries": int(fb.get("query", 0)),
+        "negative_reviews": counts["negative"], "pending_appointments": int(pending),
+        "latest": latest, "show_demo": bool(ident.get("show_demo", True)),
+        "profile": dict(prof) if prof else None,
+        "identity": {"name_variants": _jsonish(ident.get("name_variants"), []), "clinics": _jsonish(ident.get("clinics"), [])},
+    }
+
+
+@app.get("/api/doctor/me/reviews")
+def doctor_portal_reviews(request: Request):
+    doctor_sub, _scope, ident = _doctor_ctx(request)
+    with engine.begin() as conn:
+        items = _doctor_reviews(conn, doctor_sub, ident)
+    items.sort(key=lambda i: _review_date(i["date"]) or _care_date(1900, 1, 1), reverse=True)
+    return {"items": items, "show_demo": bool(ident.get("show_demo", True)),
+            "identity": {"name_variants": _jsonish(ident.get("name_variants"), []), "clinics": _jsonish(ident.get("clinics"), []),
+                         "hidden_count": len(_jsonish(ident.get("hidden_reviews"), []))}}
+
+
+@app.put("/api/doctor/me/identity")
+def doctor_portal_identity(payload: dict, request: Request):
+    """Names and clinics the doctor's reviews are matched on, plus the demo-data switch."""
+    doctor_sub, _scope, ident = _doctor_ctx(request)
+    sets, params = [], {"s": doctor_sub}
+    if "name_variants" in payload:
+        v = _clean_list(payload.get("name_variants"))
+        if not v:
+            raise HTTPException(status_code=400, detail="Add at least one name you are reviewed under.")
+        if not any(len(_name_key(x)) >= 5 for x in v):
+            raise HTTPException(status_code=400, detail="Use your full name (at least 5 letters) so reviews match only you.")
+        sets.append("name_variants=CAST(:v AS JSONB)"); params["v"] = _care_json.dumps(v)
+    if "clinics" in payload:
+        sets.append("clinics=CAST(:c AS JSONB)"); params["c"] = _care_json.dumps(_clean_list(payload.get("clinics"), 8, 160))
+    if "show_demo" in payload:
+        sets.append("show_demo=:d"); params["d"] = bool(payload.get("show_demo"))
+    if "restore_hidden" in payload and payload.get("restore_hidden"):
+        sets.append("hidden_reviews='[]'::jsonb")
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nothing to update.")
+    with engine.begin() as conn:
+        conn.execute(_auth_text(f"UPDATE aegiscare_doctor_identity SET {', '.join(sets)}, updated_at=NOW() WHERE doctor_sub=:s"), params)
+        if "show_demo" in payload:
+            # Demo complaints/queries follow the switch; real ones are never touched.
+            conn.execute(_auth_text("DELETE FROM aegiscare_doctor_feedback WHERE doctor_sub=:s AND is_demo=TRUE"), {"s": doctor_sub})
+            if payload.get("show_demo"):
+                _seed_demo_feedback(conn, doctor_sub)
+    return doctor_portal_reviews(request)
+
+
+@app.post("/api/doctor/me/reviews/{review_key}/hide")
+def doctor_portal_hide_review(review_key: str, request: Request, hidden: bool = True):
+    """'Not me': hide a matched review (or show it again)."""
+    doctor_sub, _scope, ident = _doctor_ctx(request)
+    key = str(review_key)[:60]
+    cur = [str(x) for x in _jsonish(ident.get("hidden_reviews"), [])]
+    cur = [x for x in cur if x != key] + ([key] if hidden else [])
+    added = [str(x) for x in _jsonish(ident.get("added_reviews"), []) if not (hidden and str(x) == key)]
+    with engine.begin() as conn:
+        conn.execute(_auth_text("UPDATE aegiscare_doctor_identity SET hidden_reviews=CAST(:h AS JSONB), added_reviews=CAST(:a AS JSONB), updated_at=NOW() WHERE doctor_sub=:s"),
+                     {"s": doctor_sub, "h": _care_json.dumps(cur[-500:]), "a": _care_json.dumps(added)})
+    return {"hidden": hidden, "review_key": key}
+
+
+@app.get("/api/doctor/me/review-search")
+def doctor_portal_review_search(request: Request, q: str = ""):
+    """Find a review that was missed, to add it to 'My reviews'."""
+    _doctor_ctx(request)
+    term = " ".join(q.split())[:80]
+    if len(term) < 3:
+        raise HTTPException(status_code=400, detail="Type at least 3 characters.")
+    with engine.begin() as conn:
+        try:
+          with conn.begin_nested():
+            rows = conn.execute(_auth_text("""
+                SELECT review_id, doctor_name, clinic___hospital, overall_rating, review_text, time_of_review
+                FROM reviews WHERE doctor_name ILIKE :q OR clinic___hospital ILIKE :q OR review_text ILIKE :q
+                ORDER BY review_id DESC LIMIT 20
+            """), {"q": f"%{term}%"}).mappings().all()
+        except Exception:
+            rows = []
+    return {"items": [{"key": str(r["review_id"]), "doctor_name": r["doctor_name"], "clinic": r["clinic___hospital"],
+                       "rating": r["overall_rating"], "text": (r["review_text"] or "")[:300], "date": str(r["time_of_review"] or "")} for r in rows]}
+
+
+@app.post("/api/doctor/me/reviews/{review_key}/add")
+def doctor_portal_add_review(review_key: str, request: Request):
+    doctor_sub, _scope, ident = _doctor_ctx(request)
+    key = str(review_key)[:60]
+    with engine.begin() as conn:
+        exists = conn.execute(_auth_text("SELECT 1 FROM reviews WHERE CAST(review_id AS TEXT)=:k"), {"k": key}).first()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Review not found.")
+        added = [str(x) for x in _jsonish(ident.get("added_reviews"), []) if str(x) != key] + [key]
+        hidden = [str(x) for x in _jsonish(ident.get("hidden_reviews"), []) if str(x) != key]
+        conn.execute(_auth_text("UPDATE aegiscare_doctor_identity SET added_reviews=CAST(:a AS JSONB), hidden_reviews=CAST(:h AS JSONB), updated_at=NOW() WHERE doctor_sub=:s"),
+                     {"s": doctor_sub, "a": _care_json.dumps(added[-300:]), "h": _care_json.dumps(hidden)})
+    return {"added": key}
+
+
+@app.put("/api/doctor/me/reviews/{review_key}/reply")
+def doctor_portal_save_reply(review_key: str, payload: dict, request: Request):
+    doctor_sub, _scope, _ident = _doctor_ctx(request)
+    reply = str(payload.get("reply") or "").strip()[:2000]
+    with engine.begin() as conn:
+        if reply:
+            conn.execute(_auth_text("""
+                INSERT INTO aegiscare_doctor_review_replies (doctor_sub, review_key, reply) VALUES (:s, :k, :r)
+                ON CONFLICT (doctor_sub, review_key) DO UPDATE SET reply=EXCLUDED.reply, updated_at=NOW()
+            """), {"s": doctor_sub, "k": str(review_key)[:60], "r": reply})
+        else:
+            conn.execute(_auth_text("DELETE FROM aegiscare_doctor_review_replies WHERE doctor_sub=:s AND review_key=:k"),
+                         {"s": doctor_sub, "k": str(review_key)[:60]})
+    return {"review_key": review_key, "reply": reply or None}
+
+
+@app.get("/api/doctor/me/feedback")
+def doctor_portal_feedback(request: Request):
+    doctor_sub, scope, ident = _doctor_ctx(request)
+    with engine.begin() as conn:
+        rows = conn.execute(_auth_text("""
+            SELECT f.*, a.appointment_date, a.appointment_time
+            FROM aegiscare_doctor_feedback f
+            LEFT JOIN aegiscare_patient_appointments a ON a.id = f.appointment_id
+            WHERE f.doctor_sub = ANY(:scope) AND (f.is_demo = FALSE OR f.doctor_sub = :me)
+            ORDER BY (f.status = 'open') DESC, f.created_at DESC LIMIT 200
+        """), {"scope": scope, "me": doctor_sub}).mappings().all()
+        reviews = _doctor_reviews(conn, doctor_sub, ident)
+    flagged = [r for r in reviews if r["sentiment"] == "negative"]
+    flagged.sort(key=lambda i: (-(int(i.get("severity") or 0)), str(i["date"])), reverse=False)
+    items = [_feedback_public(r) for r in rows]
+    counts = {k: {s: sum(1 for i in items if i["kind"] == k and i["status"] == s) for s in DOCTOR_FEEDBACK_STATUSES} for k in DOCTOR_FEEDBACK_KINDS}
+    return {"items": items, "review_complaints": flagged, "counts": counts}
+
+
+@app.patch("/api/doctor/me/feedback/{feedback_id}")
+def doctor_portal_feedback_update(feedback_id: int, payload: dict, request: Request):
+    """Reply to a query/complaint and/or change its status. The patient is emailed the reply."""
+    doctor_sub, scope, _ident = _doctor_ctx(request)
+    reply = payload.get("reply")
+    status = str(payload.get("status") or "").strip().lower()
+    if status and status not in DOCTOR_FEEDBACK_STATUSES:
+        raise HTTPException(status_code=400, detail="Status must be open, answered or resolved.")
+    with engine.begin() as conn:
+        row = conn.execute(_auth_text("""
+            SELECT * FROM aegiscare_doctor_feedback WHERE id=:id AND doctor_sub = ANY(:scope) AND (is_demo=FALSE OR doctor_sub=:me)
+        """), {"id": feedback_id, "scope": scope, "me": doctor_sub}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Message not found.")
+        sets, params = [], {"id": feedback_id}
+        new_reply = None
+        if reply is not None:
+            new_reply = str(reply).strip()[:3000]
+            if not new_reply:
+                raise HTTPException(status_code=400, detail="Write a reply first.")
+            sets += ["reply=:r", "replied_at=NOW()"]; params["r"] = new_reply
+            if not status:
+                status = "answered" if row["status"] == "open" else row["status"]
+        if status:
+            sets.append("status=:st"); params["st"] = status
+        if not sets:
+            raise HTTPException(status_code=400, detail="Nothing to update.")
+        conn.execute(_auth_text(f"UPDATE aegiscare_doctor_feedback SET {', '.join(sets)} WHERE id=:id"), params)
+        updated = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_feedback WHERE id=:id"), {"id": feedback_id}).mappings().first()
+    email = {"sent": False}
+    if new_reply and row["patient_sub"]:
+        h = _health_row(row["patient_sub"])
+        _n, acct_email = _account_name_email(row["patient_sub"])
+        to = (h.get("contact_email") or acct_email or "").strip()
+        sender = os.getenv("SMTP_FROM", "").strip()
+        doc_name, _e = _account_name_email(doctor_sub)
+        kind = "question" if row["kind"] == "query" else "concern"
+        body = (f"Hello {h.get('full_name') or row['patient_name'] or 'there'},\n\n{doc_name or 'Your doctor'} replied to your {kind}"
+                f"{' “' + row['subject'] + '”' if row['subject'] else ''}:\n\n{new_reply}\n\n"
+                f"You can see the full conversation on the Appointments page in AegisCare.\n\nAegisCare")
+        if to and sender:
+            try:
+                _send_via_brevo(to, f"Reply from {doc_name or 'your doctor'}: {row['subject'] or kind}", body, sender)
+                email = {"sent": True, "to": _mask(to)}
+            except HTTPException as exc:
+                email = {"sent": False, "to": _mask(to), "error": str(exc.detail)[:200]}
+        else:
+            email["error"] = "Patient has no email address." if not to else "SMTP_FROM is not set on the server."
+    return {"item": _feedback_public(updated), "email": email}
+
+
+@app.get("/api/doctor/me/profile")
+def doctor_portal_profile(request: Request):
+    doctor_sub, _scope, ident = _doctor_ctx(request)
+    with engine.begin() as conn:
+        prof = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_public_profile WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings().first()
+        hpr = conn.execute(_auth_text("SELECT hpr_id, verified FROM aegiscare_doctor_hpr WHERE google_sub=:s"), {"s": doctor_sub}).mappings().first()
+    out = dict(prof) if prof else {}
+    out.pop("doctor_sub", None)
+    return {"profile": out, "hpr": dict(hpr) if hpr else None,
+            "identity": {"name_variants": _jsonish(ident.get("name_variants"), []), "clinics": _jsonish(ident.get("clinics"), [])}}
+
+
+@app.put("/api/doctor/me/profile")
+def doctor_portal_profile_save(payload: dict, request: Request):
+    doctor_sub, _scope, _ident = _doctor_ctx(request)
+    vals = {}
+    for k, max_len in _PROFILE_TEXT_FIELDS.items():
+        if k in payload:
+            vals[k] = str(payload.get(k) or "").strip()[:max_len]
+    if "photo_url" in vals and vals["photo_url"] and not re.match(r"^https://", vals["photo_url"]):
+        raise HTTPException(status_code=400, detail="Photo must be an https:// image link.")
+    if "display_name" in vals and len(vals["display_name"]) < 3:
+        raise HTTPException(status_code=400, detail="Enter the name patients should see.")
+    sets = [f"{k}=:{k}" for k in vals]
+    if "visible" in payload:
+        sets.append("visible=:visible"); vals["visible"] = bool(payload.get("visible"))
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nothing to update.")
+    vals["s"] = doctor_sub
+    with engine.begin() as conn:
+        conn.execute(_auth_text(f"UPDATE aegiscare_doctor_public_profile SET {', '.join(sets)}, updated_at=NOW() WHERE doctor_sub=:s"), vals)
+    return doctor_portal_profile(request)
+
+
+@app.get("/api/doctors/{doctor_sub}/profile")
+def doctor_public_profile(doctor_sub: str, request: Request):
+    """What patients see about a doctor (only when the doctor made it visible)."""
+    _require_google_sub(request)
+    _ensure_doctor_portal_tables()
+    with engine.begin() as conn:
+        prof = conn.execute(_auth_text("""
+            SELECT p.*, (h.google_sub IS NOT NULL) AS has_hpr FROM aegiscare_doctor_public_profile p
+            LEFT JOIN aegiscare_doctor_hpr h ON h.google_sub = p.doctor_sub
+            WHERE p.doctor_sub=:s AND p.visible
+        """), {"s": doctor_sub[:120]}).mappings().first()
+    if not prof:
+        return {"profile": None}
+    out = dict(prof); out.pop("visible", None)
+    return {"profile": out}
+
+
+# --------------------------- patient side: questions & concerns ---------------------------
+@app.post("/api/patient/feedback")
+def patient_send_feedback(payload: dict, request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_doctor_portal_tables()
+    kind = str(payload.get("kind") or "").strip().lower()
+    if kind not in DOCTOR_FEEDBACK_KINDS:
+        raise HTTPException(status_code=400, detail="Choose question or concern.")
+    message = str(payload.get("message") or "").strip()[:3000]
+    if len(message) < 5:
+        raise HTTPException(status_code=400, detail="Write your message (at least 5 characters).")
+    subject = str(payload.get("subject") or "").strip()[:150] or None
+    try:
+        appt_id = int(payload.get("appointment_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Choose the appointment this is about.")
+    with engine.begin() as conn:
+        appt = conn.execute(_auth_text("SELECT id, doctor_sub FROM aegiscare_patient_appointments WHERE id=:id AND google_sub=:s"),
+                            {"id": appt_id, "s": google_sub}).mappings().first()
+        if not appt or not appt["doctor_sub"]:
+            raise HTTPException(status_code=404, detail="Appointment not found.")
+        recent = conn.execute(_auth_text("SELECT COUNT(*) FROM aegiscare_doctor_feedback WHERE patient_sub=:s AND created_at > NOW() - INTERVAL '1 hour'"),
+                              {"s": google_sub}).scalar()
+        if recent >= 10:
+            raise HTTPException(status_code=429, detail="Too many messages in the last hour. Please try again later.")
+        h = _health_row(google_sub)
+        name, _e = _account_name_email(google_sub)
+        row = conn.execute(_auth_text("""
+            INSERT INTO aegiscare_doctor_feedback (doctor_sub, patient_sub, patient_name, appointment_id, kind, subject, message)
+            VALUES (:d, :p, :pn, :a, :k, :sub, :m) RETURNING *
+        """), {"d": appt["doctor_sub"], "p": google_sub, "pn": h.get("full_name") or name or "Patient", "a": appt_id,
+               "k": kind, "sub": subject, "m": message}).mappings().first()
+    return {"item": _feedback_public(row), "message": "Sent to your doctor."}
+
+
+@app.get("/api/patient/feedback")
+def patient_list_feedback(request: Request):
+    google_sub = _require_google_sub(request)
+    _ensure_doctor_portal_tables()
+    with engine.begin() as conn:
+        rows = conn.execute(_auth_text("""
+            SELECT id, appointment_id, kind, subject, message, status, reply, replied_at, created_at
+            FROM aegiscare_doctor_feedback WHERE patient_sub=:s ORDER BY created_at DESC LIMIT 100
+        """), {"s": google_sub}).mappings().all()
+    return {"items": [dict(r) for r in rows]}
