@@ -5495,6 +5495,173 @@ function DoctorProfilePage({ apiBaseUrl, onHprChange }) {
   </>;
 }
 
+/* Dashboard tabs: Reviews, Investigation and Action center live inside the dashboard. */
+const ORG_DASH_TABS = [["dashboard", "Overview"], ["reviews", "Reviews"], ["investigation", "Investigation"], ["action", "Action center"]];
+const DOC_DASH_TABS = [["dashboard", "Overview"], ["doctor-reviews", "My reviews"], ["doctor-investigation", "Investigation"], ["doctor-actions", "Action plans"]];
+function DashTabs({ tabs, page, go }) {
+  return <div className="act-tabs dash-tabs" role="tablist" aria-label="Dashboard sections">
+    {tabs.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={page === k} className={"act-tab" + (page === k ? " on" : "")} onClick={() => go(k)}>{l}</button>)}
+  </div>;
+}
+
+const PLAN_PARTS = [["immediate_actions", "Immediate actions"], ["corrective_actions", "Corrective actions"], ["preventive_actions", "Preventive actions"]];
+const PLAN_FACTS = [["owner_role", "Owner"], ["timeline", "Timeline"], ["success_metrics", "Success metrics"]];
+const hasVal = v => !!String(v ?? "").trim() && String(v).trim() !== "—";
+function PlanBlock({ p, i }) {
+  const parts = PLAN_PARTS.filter(([k]) => hasVal(p[k]));
+  const facts = PLAN_FACTS.filter(([k]) => hasVal(p[k]));
+  return <div className="dp-plan">
+    <div className="row" style={{ justifyContent: "space-between", gap: 8 }}><b>{p.objective || `Action plan ${i + 1}`}</b>{hasVal(p.priority) && <span className={"chip " + (String(p.priority).toLowerCase() === "high" ? "rejected" : "pending")}>{String(p.priority).toUpperCase()}</span>}</div>
+    {parts.length > 0 && <div className={parts.length > 1 ? "grid2" : ""} style={{ gap: 12, marginTop: 8 }}>{parts.map(([k, l]) => <div key={k}><span className="small muted">{l}</span><ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{splitLines(p[k]).map((x, j) => <li key={j}>{x}</li>)}</ul></div>)}</div>}
+    {facts.length > 0 && <div className="row small" style={{ gap: 16, marginTop: 8, flexWrap: "wrap" }}>{facts.map(([k, l]) => <span key={k}><span className="muted">{l}: </span>{p[k]}</span>)}</div>}
+  </div>;
+}
+
+function DoctorInvestigation({ apiBaseUrl, go }) {
+  const { base, data, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/reviews");
+  if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
+  if (!data) return <section className="panel"><p className="muted">Loading…</p></section>;
+  const list = data.items.filter(i => i.sentiment === "negative").sort((a, b) => (Number(b.severity) || 0) - (Number(a.severity) || 0));
+  const inv = [["root_cause", "Root cause"], ["evidence", "Evidence"], ["department", "Department"], ["lead", "Responsible lead"]];
+  return <>
+    <PageHead title="Investigation" sub="Negative reviews about you, most severe first, with the AI's root-cause analysis where it is available." />
+    <DemoNotice on={data.show_demo} base={base} onChange={load} />
+    <section className="panel">
+      {list.length ? <div style={{ display: "grid", gap: 12 }}>{list.map(r => { const x = r.investigation || {}; const rows = inv.filter(([k]) => hasVal(x[k])); return <article key={r.key} className="dp-review">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div><StarRow v={r.rating} /> <b style={{ marginLeft: 6 }}>{r.reviewer || "Patient"}</b> <span className="small muted">· {fmtDate(r.date)}</span></div>
+          <div className="row" style={{ gap: 6 }}>{r.demo && <DemoBadge />}{r.severity ? <Sev v={Number(r.severity) || 1} /> : null}{r.category && <span className="chip">{r.category}</span>}</div>
+        </div>
+        <p style={{ margin: "8px 0" }}>{r.text}</p>
+        {rows.length ? <div className="grid2" style={{ gap: 10 }}>{rows.map(([k, l]) => <div key={k}><span className="small muted">{l}</span><div>{x[k]}</div></div>)}{hasVal(x.confidence) && <div><span className="small muted">Confidence</span><div>{Math.round(Number(x.confidence) * 100)}%</div></div>}</div>
+          : <p className="small muted" style={{ margin: 0 }}>{r.summary ? <><b>AI summary:</b> {r.summary}</> : "Not investigated yet."}</p>}
+        {r.plans?.length > 0 && <button className="btn" style={{ marginTop: 10 }} onClick={() => go("doctor-actions")}>See action plan</button>}
+      </article>; })}</div> : <EmptyArt kind="search" title="No negative reviews" text="Nothing to investigate." />}
+    </section>
+  </>;
+}
+
+function DoctorActions({ apiBaseUrl }) {
+  const { base, data, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/reviews");
+  if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
+  if (!data) return <section className="panel"><p className="muted">Loading…</p></section>;
+  const list = data.items.filter(i => (i.plans || []).some(p => PLAN_PARTS.concat(PLAN_FACTS).some(([k]) => hasVal(p[k]))));
+  return <>
+    <PageHead title="Action plans" sub="Suggested actions for the reviews about you. Only available details are shown." />
+    <DemoNotice on={data.show_demo} base={base} onChange={load} />
+    <div className="panel kpis" style={{ marginBottom: 16 }}>
+      <div className="kpi"><div className="l">Reviews with a plan</div><div className="v"><KpiVal v={list.length} /></div></div>
+      <div className="kpi"><div className="l">Action plans</div><div className="v"><KpiVal v={list.reduce((n, r) => n + r.plans.length, 0)} /></div></div>
+      <div className="kpi"><div className="l">High priority</div><div className="v"><KpiVal v={list.reduce((n, r) => n + r.plans.filter(p => String(p.priority).toLowerCase() === "high").length, 0)} /></div></div>
+    </div>
+    {list.length ? <div style={{ display: "grid", gap: 14 }}>{list.map(r => <section key={r.key} className="panel" style={{ margin: 0 }}>
+      <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}><span className="small muted">{r.reviewer || "Patient"} · {fmtDate(r.date)}{r.category ? ` · ${r.category}` : ""}</span>{r.demo && <DemoBadge />}</div>
+      <p style={{ margin: "6px 0 12px" }}>“{r.text}”</p>
+      <div style={{ display: "grid", gap: 10 }}>{r.plans.map((p, i) => <PlanBlock key={i} p={p} i={i} />)}</div>
+    </section>)}</div> : <section className="panel"><EmptyArt kind="search" title="No action plans yet" text="Plans appear here once your reviews have been analysed." /></section>}
+  </>;
+}
+
+/* My clinic: for doctors who run a small clinic (owner + up to 4 colleagues), or work in one. */
+const CLINIC_FIELDS = [["name", "Clinic name"], ["address", "Address"], ["city", "City"], ["phone", "Phone"], ["timings", "Timings"], ["services", "Services"]];
+function ClinicProfileForm({ base, clinic, onSaved, creating }) {
+  const [f, setF] = useState(() => ({ visible: true, ...(clinic || {}) }));
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const save = async () => { setBusy(true); setMsg(""); try { const body = {}; [...CLINIC_FIELDS.map(([k]) => k), "about", "visible"].forEach(k => { if (f[k] !== undefined) body[k] = f[k]; }); await sendJson(`${base}/doctor/me/clinic`, "PUT", body, "Could not save"); setMsg(creating ? "Clinic created. Its name was sent to AegisCare for approval." : "Clinic saved."); onSaved && onSaved(); } catch (e) { setMsg(e.message); } finally { setBusy(false); } };
+  return <div style={{ display: "grid", gap: 12 }}>
+    <div className="grid2" style={{ gap: 12 }}>{CLINIC_FIELDS.map(([k, l]) => <div className="field" style={{ margin: 0 }} key={k}><label className="fl" htmlFor={`cl-${k}`}>{l}</label><input id={`cl-${k}`} className="f" value={f[k] || ""} onChange={e => setF(x => ({ ...x, [k]: e.target.value }))} /></div>)}</div>
+    <div className="field" style={{ margin: 0 }}><label className="fl" htmlFor="cl-about">About the clinic</label><textarea id="cl-about" className="f" rows="3" value={f.about || ""} onChange={e => setF(x => ({ ...x, about: e.target.value }))} /></div>
+    <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={!!f.visible} onChange={e => setF(x => ({ ...x, visible: e.target.checked }))} /><span>Visible to patients</span></label>
+    <div className="row" style={{ gap: 8 }}><button className="btn pri" onClick={save} disabled={busy || String(f.name || "").trim().length < 3}>{busy ? "Saving…" : creating ? "Create my clinic" : "Save clinic"}</button>{msg && <span role="status" className="small" style={{ color: /Could not|Enter|Leave/.test(msg) ? "var(--crit)" : "var(--ok)" }}>{msg}</span>}</div>
+  </div>;
+}
+
+function ClinicReviews({ base }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { apiFetch(`${base}/doctor/me/clinic/reviews`).then(r => readJsonOrThrow(r, "Could not load clinic reviews")).then(setD).catch(e => setErr(e.message)); }, [base]);
+  if (err) return <p role="alert" style={{ color: "var(--crit)" }}>{err}</p>;
+  if (!d) return <p className="muted">Loading clinic reviews…</p>;
+  const total = d.counts.positive + d.counts.neutral + d.counts.negative;
+  return <>
+    {!d.approved && <div className="dp-claim pending" style={{ marginBottom: 12 }}><span className="chip pending">Waiting for approval</span><span className="small">AegisCare checks the clinic name before its real reviews are linked. Demo reviews are shown meanwhile.</span></div>}
+    <div className="panel kpis" style={{ margin: "0 0 16px" }}>
+      <div className="kpi"><div className="l">Clinic rating</div><div className="v">{d.rating ?? "—"}<span className="small muted"> / 5</span></div><div className="d"><StarRow v={d.rating} /></div></div>
+      <div className="kpi"><div className="l">Clinic reviews</div><div className="v"><KpiVal v={total} /></div><div className="d">{d.counts.positive} positive · {d.counts.negative} negative</div></div>
+    </div>
+    <ReasonsPanel r={d.reasons} />
+    <div style={{ display: "grid", gap: 10, marginTop: 16 }}>{d.items.map(r => <ReviewCard key={r.key} r={r} base={base} compact />)}</div>
+  </>;
+}
+
+function ClinicTeam({ base, data, reload }) {
+  const [email, setEmail] = useState("");
+  const [msg, setMsg] = useState("");
+  const [claims, setClaims] = useState(null);
+  const [notes, setNotes] = useState({});
+  const loadClaims = () => apiFetch(`${base}/doctor/me/clinic/claims`).then(r => r.ok ? r.json() : { items: [] }).then(d => setClaims(d.items)).catch(() => setClaims([]));
+  useEffect(() => { loadClaims(); }, [base, data]);
+  const invite = async (e) => { e.preventDefault(); setMsg(""); try { const r = await sendJson(`${base}/doctor/me/clinic/invite`, "POST", { email }, "Could not invite"); setEmail(""); setMsg(`Invited.${r.invite_emailed ? " We emailed them." : " Ask them to sign in with that Google account and open My clinic."}`); reload(); } catch (x) { setMsg(x.message); } };
+  const remove = async (id) => { await sendJson(`${base}/doctor/me/clinic/members/${id}`, "DELETE", undefined, "Could not remove"); reload(); };
+  const decide = async (c, action) => { try { await sendJson(`${base}/doctor/me/clinic/claims/${encodeURIComponent(c.doctor_sub)}`, "POST", { action, note: notes[c.doctor_sub] || "" }, "Could not save"); setMsg(`${c.doctor_name}: ${action === "approve" ? "approved" : "not approved"}.`); loadClaims(); reload(); } catch (x) { setMsg(x.message); } };
+  const used = data.members.filter(m => m.status !== "removed").length + 1;
+  return <div style={{ display: "grid", gap: 16 }}>
+    <div><p className="n" style={{ marginTop: 0 }}>TEAM · {used} OF {data.team_limit} DOCTORS</p>
+      <div className="dp-review" style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span><b>You</b> <span className="small muted">· owner</span></span><span className="chip approved">Owner</span></div>
+      {data.members.map(m => <div key={m.id} className="dp-review" style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+        <span><b>{m.display_name || m.invited_email}</b> <span className="small muted">· {m.invited_email}</span></span>
+        <span className="row" style={{ gap: 6 }}><span className={"chip " + (m.status === "active" ? "approved" : "pending")}>{m.status === "active" ? "Member" : "Invited"}</span>{m.status === "active" && m.claim_status && <span className={"chip " + (CLAIM_TEXT[m.claim_status] || CLAIM_TEXT.pending)[0]}>Claim: {(CLAIM_TEXT[m.claim_status] || CLAIM_TEXT.pending)[1]}</span>}<button className="btn" style={{ padding: "2px 10px" }} onClick={() => remove(m.id)}>Remove</button></span>
+      </div>)}
+      {used < data.team_limit ? <form onSubmit={invite} className="row" style={{ gap: 8, marginTop: 10 }}><input className="f" style={{ flex: 1, minWidth: 200 }} type="email" aria-label="Doctor's Google email" placeholder="Colleague's Google email" value={email} onChange={e => setEmail(e.target.value)} /><button className="btn pri" type="submit">Invite doctor</button></form>
+        : <p className="small muted">Team is full. Larger teams should use an Organisation account.</p>}
+      {msg && <p role="status" className="small" style={{ color: /Could not|Enter|up to|already/.test(msg) ? "var(--crit)" : "var(--ok)" }}>{msg}</p>}
+    </div>
+    <div><p className="n">YOUR TEAM'S NAME CLAIMS</p><p className="small muted" style={{ marginTop: 0 }}>Approve the names your colleagues are reviewed under, so their reviews link to their accounts.</p>
+      {!claims ? <p className="muted small">Loading…</p> : !claims.length ? <p className="small muted">No team members yet.</p> : claims.map(c => <div key={c.doctor_sub} className="dp-review" style={{ marginTop: 8 }}>
+        <div className="row" style={{ justifyContent: "space-between", gap: 8 }}><b>{c.doctor_name}</b><span className={"chip " + (CLAIM_TEXT[c.claim_status] || CLAIM_TEXT.pending)[0]}>{(CLAIM_TEXT[c.claim_status] || CLAIM_TEXT.pending)[1]}</span></div>
+        <div className="small" style={{ marginTop: 6 }}><span className="muted">Names: </span>{c.name_variants.join(", ") || "—"} <span className="muted"> · Clinics: </span>{c.clinics.join(", ") || "—"}</div>
+        {c.claim_status === "pending" && <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <input className="f" style={{ flex: 1, minWidth: 180 }} aria-label="Note" placeholder="Note (needed when not approving)" value={notes[c.doctor_sub] || ""} onChange={e => setNotes(n => ({ ...n, [c.doctor_sub]: e.target.value }))} />
+          <button className="btn pri" onClick={() => decide(c, "approve")}>Approve</button><button className="btn" onClick={() => decide(c, "reject")}>Don't approve</button></div>}
+      </div>)}
+    </div>
+  </div>;
+}
+
+function DoctorClinic({ apiBaseUrl }) {
+  const { base, data, err, load } = useDoctorApi(apiBaseUrl, "/doctor/me/clinic");
+  const [tab, setTab] = useState("reviews");
+  const [msg, setMsg] = useState("");
+  if (err) return <section className="panel"><p role="alert" style={{ color: "var(--crit)" }}>{err}</p></section>;
+  if (!data) return <section className="panel"><p className="muted">Loading…</p></section>;
+  const answer = async (id, action) => { setMsg(""); try { await sendJson(`${base}/doctor/me/clinic/memberships/${id}`, "POST", { action }, "Could not update"); load(); } catch (e) { setMsg(e.message); } };
+  const active = data.memberships.find(m => m.status === "active");
+  const invites = data.memberships.filter(m => m.status === "invited");
+  return <>
+    <PageHead title="My clinic" sub="For doctors who run a small clinic, or work in one. Hospitals use an Organisation account instead." />
+    {invites.map(m => <section key={m.id} className="panel dp-demo" style={{ marginBottom: 16, display: "flex", gap: 12, justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+      <span><b>{m.owner_name || "A doctor"}</b> invited you to join <b>{m.clinic_name}</b>{m.city ? `, ${m.city}` : ""}. The clinic owner will approve the names you are reviewed under.</span>
+      <span className="row" style={{ gap: 8 }}><button className="btn pri" onClick={() => answer(m.id, "accept")}>Accept</button><button className="btn" onClick={() => answer(m.id, "decline")}>Decline</button></span>
+    </section>)}
+    {msg && <p role="alert" style={{ color: "var(--crit)" }}>{msg}</p>}
+    {data.clinic ? <section className="panel">
+      <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}><div><h2 className="ph2" style={{ margin: 0 }}>{data.clinic.name}</h2><p className="small muted" style={{ margin: "4px 0 0" }}>{[data.clinic.address, data.clinic.city, data.clinic.timings].filter(Boolean).join(" · ")}</p></div><span className="chip approved">You run this clinic</span></div>
+      <div style={{ marginTop: 14 }}><Tabs label="Clinic sections" value={tab} onChange={setTab} tabs={[["reviews", "Clinic reviews"], ["team", "Team", data.members.length + 1], ["profile", "Clinic profile"]]} /></div>
+      {tab === "reviews" && <ClinicReviews base={base} />}
+      {tab === "team" && <ClinicTeam base={base} data={data} reload={load} />}
+      {tab === "profile" && <ClinicProfileForm base={base} clinic={data.clinic} onSaved={load} />}
+    </section> : active ? <section className="panel">
+      <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}><div><h2 className="ph2" style={{ margin: 0 }}>{active.clinic_name}</h2><p className="small muted" style={{ margin: "4px 0 0" }}>Run by {active.owner_name || "the clinic owner"}. They approve the names you are reviewed under.</p></div><button className="btn" onClick={() => answer(active.id, "leave")}>Leave clinic</button></div>
+      <div style={{ marginTop: 16 }}><ClinicReviews base={base} /></div>
+    </section> : <section className="panel">
+      <p className="n" style={{ marginTop: 0 }}>DO YOU RUN YOUR OWN CLINIC?</p>
+      <p className="small muted">Create your clinic to see the clinic's own reviews (reception, waiting, billing), publish its profile and invite up to {data.team_limit - 1} colleagues. AegisCare approves the clinic name; you approve your colleagues. If you work in a hospital, you don't need this: your hospital's Organisation account approves your names.</p>
+      <ClinicProfileForm base={base} clinic={null} onSaved={load} creating />
+    </section>}
+  </>;
+}
+
 /* Organisation: approve the names and clinics doctors claim, before real reviews are linked to them. */
 function OrgDoctorClaims({ apiBaseUrl }) {
   const [status, setStatus] = useState("pending");
@@ -5512,7 +5679,7 @@ function OrgDoctorClaims({ apiBaseUrl }) {
     catch (e) { setMsg(m => ({ ...m, [c.doctor_sub]: e.message })); } finally { setBusy(""); }
   };
   return <>
-    <PageHead title="Doctor claims" sub="Doctors claim the names and clinics their reviews are listed under. Approve a claim before those reviews are linked to the doctor's account." />
+    <PageHead title="Doctor claims" sub={data?.platform_admin ? "AegisCare admin: you approve solo doctors and clinic owners, and can act on any claim. Hospitals approve their own doctors; clinic owners approve their teams." : "Doctors claim the names and clinics their reviews are listed under. Approve a claim before those reviews are linked to the doctor's account."} />
     <section className="panel">
       <Tabs label="Claim status" value={status} onChange={setStatus} tabs={[["pending", "Waiting", data?.counts?.pending], ["approved", "Approved", data?.counts?.approved], ["rejected", "Not approved", data?.counts?.rejected]]} />
       {err && <p role="alert" style={{ color: "var(--crit)" }}>{err}</p>}
@@ -5521,6 +5688,7 @@ function OrgDoctorClaims({ apiBaseUrl }) {
         <div style={{ display: "grid", gap: 12 }}>{data.items.map(c => <article key={c.doctor_sub} className="dp-review">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div><b>{c.doctor_name || "Doctor"}</b> <span className="small muted">· {c.email}{c.specialty ? ` · ${c.specialty}` : ""}{c.account_org ? ` · ${c.account_org}` : ""}</span>
+              {data.platform_admin && c.route && <div className="small" style={{ marginTop: 4 }}><span className="muted">Approved by: </span>{c.route}</div>}
               <div className="small" style={{ marginTop: 4 }}>HPR: {c.hpr ? <><b>{c.hpr}</b> ({c.hpr_verified ? "verified" : "self-declared"})</> : <span className="muted">not added</span>}</div></div>
             <span className={"chip " + (CLAIM_TEXT[c.claim_status] || CLAIM_TEXT.pending)[0]} style={{ alignSelf: "flex-start" }}>{(CLAIM_TEXT[c.claim_status] || CLAIM_TEXT.pending)[1]}</span>
           </div>
@@ -7371,6 +7539,8 @@ function App() {
   const fullAccess = hasFullAccess(googleAuth);
   const setAbhaFlag = (v) => setGoogleAuth(a => ({ ...a, hasAbha: !!v }));
   const setHprFlag = (v) => setGoogleAuth(a => ({ ...a, hasHpr: !!v }));
+  const dashTabs = googleAuth.role === "doctor" ? DOC_DASH_TABS : googleAuth.role === "organization" ? ORG_DASH_TABS : null;
+  const dashGroup = !!dashTabs && dashTabs.some(([k]) => k === page);
   // Hospital-wide pages are for the Organisation login; a doctor lands on their own reviews instead.
   useEffect(() => { if (googleAuth.role === "doctor" && ["reviews", "investigation", "action", "reports", "approval"].includes(page)) setPage("doctor-reviews"); }, [page, googleAuth.role]);
   const dashboardView = googleAuth.role === "doctor"
@@ -7391,6 +7561,8 @@ function App() {
     "doctor-reviews": <DoctorReviews apiBaseUrl={settings.api} />, "doctor-inbox": <DoctorInbox apiBaseUrl={settings.api} go={setPage} />,
     "doctor-profile": <DoctorProfilePage apiBaseUrl={settings.api} onHprChange={setHprFlag} />,
     "doctor-claims": googleAuth.role === "organization" ? <OrgDoctorClaims apiBaseUrl={settings.api} /> : dashboardView,
+    "doctor-investigation": <DoctorInvestigation apiBaseUrl={settings.api} go={setPage} />, "doctor-actions": <DoctorActions apiBaseUrl={settings.api} />,
+    "doctor-clinic": <DoctorClinic apiBaseUrl={settings.api} />,
   }[page];
 
   return <>
@@ -7416,18 +7588,19 @@ function App() {
         </> : <>
           {inApp && <nav className="top-nav" aria-label="Main navigation">
             {(googleAuth.role === "patient"
-              ? [["patient-dashboard", "My care", "dash"], ["patient-appointments", "Appointments", "check"], ["patient-records", "My records", "file"], ["patient-glow", "Prep & Perk", "glow"], ["patient-activities", "Activities", "pulse"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["contact", "Contact us", "contact"]]
+              ? [["patient-dashboard", "My care", "dash"], ["patient-appointments", "Appointments", "check"], ["patient-records", "My records", "file"], ["patient-glow", "Prep & Perk", "glow"], ["patient-activities", "Activities", "pulse"], ["try", "Try It", "flask"], ["contact", "Contact us", "contact"]]
               // Doctors: their own portal only. Hospital-wide pages belong to the Organisation login.
               : googleAuth.role === "doctor"
-              ? [["dashboard", "My dashboard", "dash"], ["doctor-reviews", "My reviews", "reviews"], ["doctor-inbox", "Complaints & queries", "approval"], ["my-patients", "My patients", "user"], ["try", "Try It", "flask"], ["settings", "Settings", "settings"], ["doctor-profile", "My profile", "file"], ["contact", "Contact us", "contact"]]
+              ? [["dashboard", "My dashboard", "dash"], ["doctor-inbox", "Complaints & queries", "approval"], ["my-patients", "My patients", "user"], ["doctor-clinic", "My clinic", "hospital"], ["try", "Try It", "flask"], ["doctor-profile", "My profile", "file"], ["contact", "Contact us", "contact"]]
               // Organisations: the same sections their sidebar had, now in the header.
+              // Settings lives in the profile menu; Reviews, Investigation and Action center are tabs of the Dashboard.
               : NAV.flatMap(([, items]) => items)
-                .filter(([k]) => k !== "home" && !(googleAuth.role === "doctor" && k === "investigation"))
+                .filter(([k]) => !["home", "settings", "reviews", "investigation", "action"].includes(k))
                 .flatMap(item => item[0] === "try" && googleAuth.role === "doctor" ? [item, ["my-patients", "My patients", "user"]] : [item])
                 .concat([["contact", "Contact us", "contact"]])
             ).map(([k, l, ic]) =>
               <button key={k}
-                className={"nav" + ((page === k || (k === "patient-dashboard" && page === "dashboard")) ? " on" : "")}
+                className={"nav" + ((page === k || (k === "patient-dashboard" && page === "dashboard") || (k === "dashboard" && dashGroup)) ? " on" : "")}
                 aria-current={page === k ? "page" : undefined}
                 onClick={() => setPage(k === "patient-dashboard" ? "patient-dashboard" : k)}
                 title={l}>
@@ -7472,6 +7645,7 @@ function App() {
       {showSide && <SideNav page={page} go={setPage} waiting={waiting} role={googleAuth.role} />}
       <main key={fx ? page : "static"} className={"main" + (page === "home" ? " landing-main" : "")}>
         {apiError && page !== "settings" && page !== "login" && page !== "onboarding" && <div className="panel" role="status" style={{ marginBottom: 16, borderColor: "var(--danger, #bd7777)" }}><b>Backend connection issue</b><p className="small" style={{ margin: "6px 0 0" }}>{apiError}. Check Settings → API connection and verify the dashboard, reviews, investigations, and action-plans endpoints.</p><button className="btn" style={{ marginTop: 10 }} onClick={() => setPage("settings")}>Open API settings</button></div>}
+        {dashGroup && <DashTabs tabs={dashTabs} page={page} go={setPage} />}
         {fx && page === "dashboard" && googleAuth.role === "organization" && <AttentionToday name={googleAuth.name} open={open} go={setPage}
           reviews={googleAuth.role === "organization" && !fullAccess ? scopeReviewsToOrg(googleAuth.profile?.org_name, reviews).scoped : reviews} />}
         {fx && page === "dashboard" && googleAuth.role === "organization" && <LiveFeed reviews={reviews} onOpen={() => setPage("reviews")} />}

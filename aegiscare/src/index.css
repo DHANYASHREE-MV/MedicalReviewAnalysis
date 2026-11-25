@@ -1619,3 +1619,5 @@ body { background: var(--bg); }
 .dp-dayreasons { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
 .dp-bar.pos i { background: var(--ok, #5d7a3e); }
 .dp-wbar { flex: 1; min-height: 0; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.dash-tabs { margin: 0 0 18px; }
+.dp-plan { border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: 0 10px 10px 0; padding: 10px 12px; background: var(--surface); }
