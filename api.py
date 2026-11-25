@@ -4538,6 +4538,7 @@ def _doctor_reviews(conn, doctor_sub, ident):
             rows = []
     replies = {r["review_key"]: r["reply"] for r in conn.execute(_auth_text(
         "SELECT review_key, reply FROM aegiscare_doctor_review_replies WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings()}
+    investigations, plans = _review_analysis(conn, [r["review_id"] for r in rows])
     items = []
     for r in rows:
         key = str(r["review_id"])
@@ -4551,6 +4552,7 @@ def _doctor_reviews(conn, doctor_sub, ident):
             "date": str(r["time_of_review"] or ""), "sentiment": sent, "category": cat,
             "severity": r["severity"], "summary": r["summary"], "analysed": r["sentiment"] is not None,
             "reply": replies.get(key), "suggested_reply": _suggest_reply(sent, cat),
+            "investigation": investigations.get(key), "plans": plans.get(key, []),
         })
     if ident.get("show_demo", True):
         clinic = demo_clinics[0] if demo_clinics else "AegisCare Partner Clinic"
@@ -4566,8 +4568,58 @@ def _doctor_reviews(conn, doctor_sub, ident):
                 "sentiment": sent, "category": cat, "severity": sev,
                 "summary": f"{sent.capitalize()} feedback about {cat.lower()}.", "analysed": True,
                 "reply": replies.get(key), "suggested_reply": _suggest_reply(sent, cat),
+                "investigation": _DEMO_INVESTIGATION.get(cat) if sent == "negative" else None,
+                "plans": [_DEMO_PLANS[cat]] if sent == "negative" and cat in _DEMO_PLANS else [],
             })
     return items
+
+
+_DEMO_INVESTIGATION = {
+    "Wait Time": {"root_cause": "Appointments booked every 10 minutes while consultations average 18 minutes, so delays build up through the session.",
+                  "evidence": "Patient waited over an hour despite an appointment.", "department": "Front office", "lead": "Clinic manager", "confidence": 0.82},
+    "Communication": {"root_cause": "Short consultations leave no time for questions; no written summary is given.",
+                      "evidence": "Consultation under five minutes; questions not answered.", "department": "OPD", "lead": "Consultant", "confidence": 0.78},
+    "Treatment Outcome": {"root_cause": "Reasons for tests are not explained, so patients see them as unnecessary.",
+                          "evidence": "Patient unsure all prescribed tests were needed.", "department": "OPD", "lead": "Consultant", "confidence": 0.7},
+}
+_DEMO_PLANS = {
+    "Wait Time": {"objective": "Cut waiting time to under 20 minutes", "priority": "high",
+                  "immediate_actions": "Tell waiting patients about delays every 20 minutes\nSend an SMS when running late",
+                  "corrective_actions": "Book follow-ups at 15-minute slots and new patients at 20", "preventive_actions": "Review the daily schedule against actual consultation times",
+                  "owner_role": "Clinic manager", "timeline": "2 weeks", "success_metrics": "Average wait under 20 minutes; fewer wait-time complaints"},
+    "Communication": {"objective": "Make sure every patient leaves with their questions answered", "priority": "medium",
+                      "immediate_actions": "End each visit by asking 'What questions do you have?'", "corrective_actions": "Give a short written plan after each consultation",
+                      "preventive_actions": "", "owner_role": "Consultant", "timeline": "1 month", "success_metrics": "Communication complaints halve in 3 months"},
+    "Treatment Outcome": {"objective": "Explain why each test is needed", "priority": "medium",
+                          "immediate_actions": "Write the reason next to each test on the prescription", "corrective_actions": "",
+                          "preventive_actions": "Use a patient leaflet for common test panels", "owner_role": "Consultant", "timeline": "2 weeks", "success_metrics": "No 'unnecessary tests' comments next quarter"},
+}
+
+
+def _review_analysis(conn, review_ids):
+    """Agent 2 investigation and Agent 3 action plans already saved for these reviews (read-only)."""
+    inv, plans = {}, {}
+    if not review_ids:
+        return inv, plans
+    ids = [str(x) for x in review_ids]
+    try:
+        with conn.begin_nested():
+            for a in conn.execute(_auth_text("""
+                SELECT CAST(review_id AS TEXT) AS k, root_cause, evidence, department, lead, confidence
+                FROM analysis WHERE CAST(review_id AS TEXT) = ANY(:ids)"""), {"ids": ids}).mappings():
+                inv[a["k"]] = {k: a[k] for k in ("root_cause", "evidence", "department", "lead", "confidence")}
+    except Exception:
+        pass
+    try:
+        with conn.begin_nested():
+            for p in conn.execute(_auth_text("""
+                SELECT CAST(review_id AS TEXT) AS k, priority, objective, immediate_actions, corrective_actions,
+                       preventive_actions, owner_role, timeline, success_metrics
+                FROM action_plans WHERE CAST(review_id AS TEXT) = ANY(:ids)"""), {"ids": ids}).mappings():
+                plans.setdefault(p["k"], []).append({k: p[k] for k in p.keys() if k != "k"})
+    except Exception:
+        pass
+    return inv, plans
 
 
 def _claim_public(ident):
@@ -4977,20 +5029,46 @@ def patient_list_feedback(request: Request):
 def _org_ctx(request: Request):
     org_sub = _require_role(request, "organization", "Only Organisation accounts can review doctor claims.")
     _ensure_doctor_portal_tables()
+    _ensure_clinic_tables()
     return org_sub, (_profile_for_sub(org_sub).get("org_name") or "").strip()
 
 
+AEGISCARE_ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("AEGISCARE_ADMIN_EMAILS", "dhanyashreemv63@gmail.com").split(",") if e.strip()}
+CLINIC_TEAM_LIMIT = int(os.getenv("AEGISCARE_CLINIC_TEAM_LIMIT", "5"))
+
+
+def _is_platform_admin(request: Request):
+    return str(request.session.get("google_email") or "").strip().lower() in AEGISCARE_ADMIN_EMAILS
+
+
 def _claim_for_org(org_name, clinics):
-    """An organisation sees claims naming its hospital; claims naming no hospital are visible to every organisation."""
-    if not org_name or not clinics:
-        return True
+    """Does this organisation's name match one of the claimed clinics?"""
     key = _name_key(org_name)
-    return any(key and (key in _name_key(c) or _name_key(c) in key) for c in clinics)
+    return bool(key) and any(key in _name_key(c) or (_name_key(c) and _name_key(c) in key) for c in clinics)
+
+
+def _claim_route(conn, doctor_sub, claim, org_names=None):
+    """Who approves a doctor's claim: their small clinic's owner, a matching hospital/organisation, or the AegisCare admin."""
+    owner = conn.execute(_auth_text("""
+        SELECT c.owner_sub, c.name FROM aegiscare_clinic_members m JOIN aegiscare_clinics c ON c.id = m.clinic_id
+        WHERE m.doctor_sub=:s AND m.status='active' AND c.owner_sub <> :s LIMIT 1
+    """), {"s": doctor_sub}).mappings().first()
+    if owner:
+        return {"kind": "clinic", "label": f"Clinic owner · {owner['name']}", "owner_sub": owner["owner_sub"]}
+    if org_names is None:
+        org_names = [r[0] for r in conn.execute(_auth_text(
+            "SELECT org_name FROM aegiscare_user_profiles WHERE role='organization' AND COALESCE(org_name,'') <> ''")).all()]
+    clinics = claim["clinics"] + claim["approved_clinics"]
+    for o in org_names:
+        if _claim_for_org(o, clinics):
+            return {"kind": "org", "label": f"Organisation · {o}", "org_name": o}
+    return {"kind": "platform", "label": "AegisCare admin (no organisation)"}
 
 
 @app.get("/api/org/doctor-claims")
 def org_list_doctor_claims(request: Request, status: str = "pending"):
     _org_sub, org_name = _org_ctx(request)
+    admin = _is_platform_admin(request)
     with engine.begin() as conn:
         rows = conn.execute(_auth_text("""
             SELECT i.*, u.display_name, u.email, p.specialty, p.org_name, h.hpr_id, h.verified AS hpr_verified
@@ -5001,9 +5079,13 @@ def org_list_doctor_claims(request: Request, status: str = "pending"):
             ORDER BY i.claim_submitted_at DESC NULLS LAST
         """)).mappings().all()
         items = []
+        org_names = [x[0] for x in conn.execute(_auth_text(
+            "SELECT org_name FROM aegiscare_user_profiles WHERE role='organization' AND COALESCE(org_name,'') <> ''")).all()]
         for r in rows:
             claim = _claim_public(r)
-            if not _claim_for_org(org_name, claim["clinics"] + claim["approved_clinics"]):
+            route = _claim_route(conn, r["doctor_sub"], claim, org_names)
+            mine = route["kind"] == "org" and _claim_for_org(org_name, claim["clinics"] + claim["approved_clinics"])
+            if not (admin or mine):
                 continue
             added = []
             if claim["pending_added"]:
@@ -5017,46 +5099,32 @@ def org_list_doctor_claims(request: Request, status: str = "pending"):
             items.append({"doctor_sub": r["doctor_sub"], "doctor_name": r["display_name"], "email": r["email"],
                           "specialty": r["specialty"], "account_org": r["org_name"],
                           "hpr": (_format_14(r["hpr_id"]) if r["hpr_id"] and r["hpr_id"].isdigit() else r["hpr_id"]),
-                          "hpr_verified": bool(r["hpr_verified"]), "pending_added_reviews": added, **claim})
+                          "hpr_verified": bool(r["hpr_verified"]), "pending_added_reviews": added,
+                          "route": route["label"], "route_kind": route["kind"], **claim})
     counts = {k: sum(1 for i in items if i["claim_status"] == k) for k in ("pending", "approved", "rejected")}
     if status in counts:
         items = [i for i in items if i["claim_status"] == status]
-    return {"items": items, "counts": counts, "org_name": org_name}
+    return {"items": items, "counts": counts, "org_name": org_name, "platform_admin": admin}
 
 
-@app.post("/api/org/doctor-claims/{doctor_sub}")
-def org_decide_doctor_claim(doctor_sub: str, payload: dict, request: Request):
-    """Approve (names, clinics and added reviews start matching) or reject with a note. The doctor is emailed."""
-    org_sub, org_name = _org_ctx(request)
-    action = str(payload.get("action") or "").lower()
-    note = str(payload.get("note") or "").strip()[:500] or None
-    if action not in ("approve", "reject"):
-        raise HTTPException(status_code=400, detail="Action must be approve or reject.")
-    if action == "reject" and not note:
-        raise HTTPException(status_code=400, detail="Add a short reason so the doctor knows what to change.")
+def _decide_claim(doctor_sub, action, note, reviewer_sub, reviewer_name):
     with engine.begin() as conn:
-        ident = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_identity WHERE doctor_sub=:s"), {"s": doctor_sub[:200]}).mappings().first()
-        if not ident:
-            raise HTTPException(status_code=404, detail="Claim not found.")
-        claim = _claim_public(ident)
-        if not _claim_for_org(org_name, claim["clinics"] + claim["approved_clinics"]):
-            raise HTTPException(status_code=404, detail="Claim not found.")
         if action == "approve":
             conn.execute(_auth_text("""
                 UPDATE aegiscare_doctor_identity SET approved_names=name_variants, approved_clinics=clinics, approved_added=added_reviews,
                     claim_status='approved', claim_note=:n, claim_reviewed_by=:o, claim_reviewed_at=NOW() WHERE doctor_sub=:s
-            """), {"s": doctor_sub, "n": note, "o": org_sub})
+            """), {"s": doctor_sub, "n": note, "o": reviewer_sub})
         else:
             conn.execute(_auth_text("""
                 UPDATE aegiscare_doctor_identity SET claim_status='rejected', claim_note=:n, claim_reviewed_by=:o, claim_reviewed_at=NOW()
                 WHERE doctor_sub=:s
-            """), {"s": doctor_sub, "n": note, "o": org_sub})
+            """), {"s": doctor_sub, "n": note, "o": reviewer_sub})
         row = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_identity WHERE doctor_sub=:s"), {"s": doctor_sub}).mappings().first()
     email = {"sent": False}
     name, to = _account_name_email(doctor_sub)
     sender = os.getenv("SMTP_FROM", "").strip()
     if to and sender and not to.endswith(".local"):
-        body = (f"Hello {name or 'Doctor'},\n\n{org_name or 'Your organisation'} has "
+        body = (f"Hello {name or 'Doctor'},\n\n{reviewer_name or 'Your organisation'} has "
                 f"{'approved' if action == 'approve' else 'not approved'} the names and clinics you claimed in AegisCare."
                 + ("\n\nYour real reviews will now appear in My reviews." if action == "approve" else "")
                 + (f"\n\nNote: {note}" if note else "") + "\n\nAegisCare")
@@ -5066,3 +5134,302 @@ def org_decide_doctor_claim(doctor_sub: str, payload: dict, request: Request):
         except HTTPException as exc:
             email = {"sent": False, "error": str(exc.detail)[:200]}
     return {"claim": _claim_public(row), "email": email}
+
+
+def _decision_input(payload):
+    action = str(payload.get("action") or "").lower()
+    note = str(payload.get("note") or "").strip()[:500] or None
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="Action must be approve or reject.")
+    if action == "reject" and not note:
+        raise HTTPException(status_code=400, detail="Add a short reason so the doctor knows what to change.")
+    return action, note
+
+
+@app.post("/api/org/doctor-claims/{doctor_sub}")
+def org_decide_doctor_claim(doctor_sub: str, payload: dict, request: Request):
+    """Organisation (for its own hospital's doctors) or the AegisCare admin (any claim) approves or rejects."""
+    org_sub, org_name = _org_ctx(request)
+    action, note = _decision_input(payload)
+    with engine.begin() as conn:
+        ident = conn.execute(_auth_text("SELECT * FROM aegiscare_doctor_identity WHERE doctor_sub=:s"), {"s": doctor_sub[:200]}).mappings().first()
+        if not ident:
+            raise HTTPException(status_code=404, detail="Claim not found.")
+        claim = _claim_public(ident)
+        route = _claim_route(conn, doctor_sub, claim)
+    admin = _is_platform_admin(request)
+    if not admin and not (route["kind"] == "org" and _claim_for_org(org_name, claim["clinics"] + claim["approved_clinics"])):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+    return _decide_claim(doctor_sub, action, note, org_sub, "AegisCare" if admin and route["kind"] != "org" else org_name)
+
+
+
+# ============================================================
+# SMALL CLINICS: a doctor who runs their own clinic manages it inside the doctor portal.
+#   Owner + up to CLINIC_TEAM_LIMIT doctors in total. The owner approves colleagues' name
+#   claims; the owner's own claim (including the clinic name) goes to the AegisCare admin.
+# ============================================================
+_CLINIC_FIELDS = {"name": 160, "address": 400, "city": 80, "phone": 30, "timings": 200, "services": 600, "about": 2000}
+
+
+def _ensure_clinic_tables():
+    _ensure_doctor_portal_tables()
+    with engine.begin() as conn:
+        cols = ", ".join(f"{c} TEXT" for c in _CLINIC_FIELDS if c != "name")
+        conn.execute(_auth_text(f"""
+            CREATE TABLE IF NOT EXISTS aegiscare_clinics (
+                id BIGSERIAL PRIMARY KEY, owner_sub TEXT NOT NULL UNIQUE, name TEXT NOT NULL, {cols},
+                visible BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(_auth_text("""
+            CREATE TABLE IF NOT EXISTS aegiscare_clinic_members (
+                id BIGSERIAL PRIMARY KEY, clinic_id BIGINT NOT NULL REFERENCES aegiscare_clinics(id) ON DELETE CASCADE,
+                doctor_sub TEXT, invited_email TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'invited',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (clinic_id, invited_email)
+            )
+        """))
+
+
+_ensure_clinic_tables = _run_once(_ensure_clinic_tables)
+try:
+    _ensure_clinic_tables()
+except Exception as _exc:
+    print(f"Clinic tables will be created on first use: {_exc}")
+
+
+def _clinic_ctx(request: Request):
+    doctor_sub, _scope = _doctor_scope(request)
+    _ensure_clinic_tables()
+    email = str(request.session.get("google_email") or "").strip().lower()
+    return doctor_sub, email
+
+
+def _owned_clinic(conn, doctor_sub):
+    row = conn.execute(_auth_text("SELECT * FROM aegiscare_clinics WHERE owner_sub=:s"), {"s": doctor_sub}).mappings().first()
+    return dict(row) if row else None
+
+
+def _clinic_members(conn, clinic_id):
+    return [dict(r) for r in conn.execute(_auth_text("""
+        SELECT m.id, m.doctor_sub, m.invited_email, m.status, m.created_at, u.display_name, i.claim_status
+        FROM aegiscare_clinic_members m
+        LEFT JOIN aegiscare_google_users u ON u.google_sub = m.doctor_sub
+        LEFT JOIN aegiscare_doctor_identity i ON i.doctor_sub = m.doctor_sub
+        WHERE m.clinic_id=:c ORDER BY m.created_at
+    """), {"c": clinic_id}).mappings()]
+
+
+@app.get("/api/doctor/me/clinic")
+def clinic_get(request: Request):
+    doctor_sub, email = _clinic_ctx(request)
+    with engine.begin() as conn:
+        clinic = _owned_clinic(conn, doctor_sub)
+        members = _clinic_members(conn, clinic["id"]) if clinic else []
+        memberships = [dict(r) for r in conn.execute(_auth_text("""
+            SELECT m.id, m.status, c.name AS clinic_name, c.city, u.display_name AS owner_name
+            FROM aegiscare_clinic_members m JOIN aegiscare_clinics c ON c.id = m.clinic_id
+            LEFT JOIN aegiscare_google_users u ON u.google_sub = c.owner_sub
+            WHERE (m.doctor_sub=:s OR (m.doctor_sub IS NULL AND lower(m.invited_email)=:e)) AND m.status IN ('invited','active')
+        """), {"s": doctor_sub, "e": email}).mappings()]
+    for m in members:
+        m.pop("doctor_sub", None)
+    return {"clinic": clinic, "members": members, "memberships": memberships, "team_limit": CLINIC_TEAM_LIMIT}
+
+
+@app.put("/api/doctor/me/clinic")
+def clinic_save(payload: dict, request: Request):
+    """Create or update the clinic this doctor runs. The clinic name joins their claim (approved by the AegisCare admin)."""
+    doctor_sub, _email = _clinic_ctx(request)
+    vals = {k: str(payload.get(k) or "").strip()[:n] for k, n in _CLINIC_FIELDS.items() if k in payload}
+    if "name" in vals and len(vals["name"]) < 3:
+        raise HTTPException(status_code=400, detail="Enter the clinic's name.")
+    with engine.begin() as conn:
+        member = conn.execute(_auth_text("SELECT 1 FROM aegiscare_clinic_members m JOIN aegiscare_clinics c ON c.id=m.clinic_id WHERE m.doctor_sub=:s AND m.status='active' AND c.owner_sub<>:s"),
+                              {"s": doctor_sub}).first()
+        if member:
+            raise HTTPException(status_code=409, detail="You are part of another clinic's team. Leave it before creating your own clinic.")
+        clinic = _owned_clinic(conn, doctor_sub)
+        if not clinic:
+            if "name" not in vals:
+                raise HTTPException(status_code=400, detail="Enter the clinic's name.")
+            cols = ["owner_sub"] + list(vals)
+            conn.execute(_auth_text(f"INSERT INTO aegiscare_clinics ({', '.join(cols)}, visible) VALUES ({', '.join(':' + c for c in cols)}, :v)"),
+                         {"owner_sub": doctor_sub, **vals, "v": bool(payload.get("visible", True))})
+        else:
+            sets = [f"{k}=:{k}" for k in vals]
+            if "visible" in payload:
+                sets.append("visible=:v"); vals["v"] = bool(payload.get("visible"))
+            if sets:
+                conn.execute(_auth_text(f"UPDATE aegiscare_clinics SET {', '.join(sets)}, updated_at=NOW() WHERE owner_sub=:o"), {"o": doctor_sub, **vals})
+        clinic = _owned_clinic(conn, doctor_sub)
+        ident = _doctor_seed(conn, doctor_sub)
+        clinics = _jsonish(ident.get("clinics"), [])
+        if clinic["name"].lower() not in [c.lower() for c in clinics]:
+            new = _clean_list([clinic["name"]] + clinics, 8, 160)
+            conn.execute(_auth_text("""UPDATE aegiscare_doctor_identity SET clinics=CAST(:c AS JSONB), claim_status='pending', claim_note=NULL,
+                         claim_submitted_at=NOW(), updated_at=NOW() WHERE doctor_sub=:s"""), {"s": doctor_sub, "c": _care_json.dumps(new)})
+    return clinic_get(request)
+
+
+@app.post("/api/doctor/me/clinic/invite")
+def clinic_invite(payload: dict, request: Request):
+    doctor_sub, email = _clinic_ctx(request)
+    to = str(payload.get("email") or "").strip().lower()[:200]
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
+        raise HTTPException(status_code=400, detail="Enter the doctor's Google email address.")
+    if to == email:
+        raise HTTPException(status_code=400, detail="You are already the owner.")
+    with engine.begin() as conn:
+        clinic = _owned_clinic(conn, doctor_sub)
+        if not clinic:
+            raise HTTPException(status_code=404, detail="Create your clinic first.")
+        count = conn.execute(_auth_text("SELECT COUNT(*) FROM aegiscare_clinic_members WHERE clinic_id=:c AND status IN ('invited','active')"),
+                             {"c": clinic["id"]}).scalar()
+        if count + 1 >= CLINIC_TEAM_LIMIT:
+            raise HTTPException(status_code=409, detail=f"A small clinic can have up to {CLINIC_TEAM_LIMIT} doctors including you. Larger teams should use an Organisation account.")
+        conn.execute(_auth_text("""
+            INSERT INTO aegiscare_clinic_members (clinic_id, invited_email, status) VALUES (:c, :e, 'invited')
+            ON CONFLICT (clinic_id, invited_email) DO UPDATE SET status='invited', doctor_sub=NULL
+        """), {"c": clinic["id"], "e": to})
+    sender = os.getenv("SMTP_FROM", "").strip()
+    sent = False
+    if sender:
+        name, _e = _account_name_email(doctor_sub)
+        try:
+            _send_via_brevo(to, f"{name or 'A doctor'} invited you to {clinic['name']} on AegisCare",
+                            f"Hello,\n\n{name or 'A doctor'} invited you to join {clinic['name']} on AegisCare.\n\n"
+                            f"Sign in with Google using this email address, choose Doctor, and accept the invitation under My clinic.\n\nAegisCare", sender)
+            sent = True
+        except HTTPException:
+            sent = False
+    out = clinic_get(request)
+    out["invite_emailed"] = sent
+    return out
+
+
+@app.delete("/api/doctor/me/clinic/members/{member_id}")
+def clinic_remove_member(member_id: int, request: Request):
+    doctor_sub, _email = _clinic_ctx(request)
+    with engine.begin() as conn:
+        clinic = _owned_clinic(conn, doctor_sub)
+        if not clinic:
+            raise HTTPException(status_code=404, detail="Clinic not found.")
+        conn.execute(_auth_text("DELETE FROM aegiscare_clinic_members WHERE id=:id AND clinic_id=:c"), {"id": member_id, "c": clinic["id"]})
+    return clinic_get(request)
+
+
+@app.post("/api/doctor/me/clinic/memberships/{member_id}")
+def clinic_membership_answer(member_id: int, payload: dict, request: Request):
+    """An invited doctor accepts or declines, or an active member leaves."""
+    doctor_sub, email = _clinic_ctx(request)
+    action = str(payload.get("action") or "").lower()
+    if action not in ("accept", "decline", "leave"):
+        raise HTTPException(status_code=400, detail="Action must be accept, decline or leave.")
+    with engine.begin() as conn:
+        m = conn.execute(_auth_text("""
+            SELECT m.*, c.owner_sub FROM aegiscare_clinic_members m JOIN aegiscare_clinics c ON c.id=m.clinic_id
+            WHERE m.id=:id AND (m.doctor_sub=:s OR (m.doctor_sub IS NULL AND lower(m.invited_email)=:e))
+        """), {"id": member_id, "s": doctor_sub, "e": email}).mappings().first()
+        if not m:
+            raise HTTPException(status_code=404, detail="Invitation not found.")
+        if action == "accept":
+            if _owned_clinic(conn, doctor_sub):
+                raise HTTPException(status_code=409, detail="You already run your own clinic.")
+            other = conn.execute(_auth_text("SELECT 1 FROM aegiscare_clinic_members WHERE doctor_sub=:s AND status='active' AND id<>:id"),
+                                 {"s": doctor_sub, "id": member_id}).first()
+            if other:
+                raise HTTPException(status_code=409, detail="Leave your current clinic first.")
+            conn.execute(_auth_text("UPDATE aegiscare_clinic_members SET doctor_sub=:s, status='active' WHERE id=:id"), {"s": doctor_sub, "id": member_id})
+            ident = _doctor_seed(conn, doctor_sub)
+            if ident.get("claim_status") != "approved":
+                conn.execute(_auth_text("UPDATE aegiscare_doctor_identity SET claim_status='pending', claim_submitted_at=NOW() WHERE doctor_sub=:s"), {"s": doctor_sub})
+        else:
+            conn.execute(_auth_text("DELETE FROM aegiscare_clinic_members WHERE id=:id"), {"id": member_id})
+    return clinic_get(request)
+
+
+@app.get("/api/doctor/me/clinic/claims")
+def clinic_claims(request: Request):
+    """Name claims of the clinic's doctors, for the owner to approve."""
+    doctor_sub, _email = _clinic_ctx(request)
+    with engine.begin() as conn:
+        clinic = _owned_clinic(conn, doctor_sub)
+        if not clinic:
+            return {"items": []}
+        rows = conn.execute(_auth_text("""
+            SELECT i.*, u.display_name, u.email FROM aegiscare_clinic_members m
+            JOIN aegiscare_doctor_identity i ON i.doctor_sub = m.doctor_sub
+            LEFT JOIN aegiscare_google_users u ON u.google_sub = m.doctor_sub
+            WHERE m.clinic_id=:c AND m.status='active'
+        """), {"c": clinic["id"]}).mappings().all()
+    return {"items": [{"doctor_sub": r["doctor_sub"], "doctor_name": r["display_name"], "email": r["email"], **_claim_public(r)} for r in rows]}
+
+
+@app.post("/api/doctor/me/clinic/claims/{member_sub}")
+def clinic_decide_claim(member_sub: str, payload: dict, request: Request):
+    doctor_sub, _email = _clinic_ctx(request)
+    action, note = _decision_input(payload)
+    with engine.begin() as conn:
+        clinic = _owned_clinic(conn, doctor_sub)
+        ok = clinic and conn.execute(_auth_text("SELECT 1 FROM aegiscare_clinic_members WHERE clinic_id=:c AND doctor_sub=:m AND status='active'"),
+                                     {"c": clinic["id"], "m": member_sub}).first()
+        exists = conn.execute(_auth_text("SELECT 1 FROM aegiscare_doctor_identity WHERE doctor_sub=:m"), {"m": member_sub}).first()
+    if not ok or not exists or member_sub == doctor_sub:
+        raise HTTPException(status_code=404, detail="Claim not found.")
+    return _decide_claim(member_sub, action, note, doctor_sub, clinic["name"])
+
+
+_DEMO_CLINIC_REVIEWS = [
+    (5, "Reception was quick and the clinic was spotless.", "positive", "Staff Behaviour", 3),
+    (2, "Billing took 25 minutes and nobody explained the charges.", "negative", "Billing", 9),
+    (4, "Easy to book on the phone. Parking is difficult.", "positive", "Appointments", 17),
+    (1, "Waited 70 minutes in a crowded waiting area with no updates.", "negative", "Wait Time", 26),
+    (5, "Pharmacy inside the clinic saved us a trip.", "positive", "Facilities", 40),
+    (3, "Doctor was good but the toilets need cleaning.", "neutral", "Facilities", 55),
+]
+
+
+@app.get("/api/doctor/me/clinic/reviews")
+def clinic_reviews(request: Request):
+    """Reviews of the clinic itself (owner and active team). Real reviews only once the owner's claim of the clinic name is approved."""
+    doctor_sub, _email = _clinic_ctx(request)
+    with engine.begin() as conn:
+        clinic = _owned_clinic(conn, doctor_sub)
+        if not clinic:
+            row = conn.execute(_auth_text("""SELECT c.* FROM aegiscare_clinic_members m JOIN aegiscare_clinics c ON c.id=m.clinic_id
+                                              WHERE m.doctor_sub=:s AND m.status='active'"""), {"s": doctor_sub}).mappings().first()
+            clinic = dict(row) if row else None
+        if not clinic:
+            raise HTTPException(status_code=404, detail="You are not part of a clinic yet.")
+        owner_ident = _doctor_seed(conn, clinic["owner_sub"])
+        approved = clinic["name"].lower() in [c.lower() for c in _jsonish(owner_ident.get("approved_clinics"), [])]
+        rows = []
+        if approved:
+            try:
+                with conn.begin_nested():
+                    rows = conn.execute(_auth_text("""
+                        SELECT r.review_id, r.doctor_name, r.clinic___hospital, r.overall_rating, r.review_text, r.reviewer_name, r.time_of_review,
+                               t.sentiment, t.severity, t.category, t.summary
+                        FROM reviews r LEFT JOIN review_triage t ON t.review_id = r.review_id
+                        WHERE r.clinic___hospital ILIKE :n OR r.doctor_name ILIKE :n ORDER BY r.review_id DESC LIMIT 300
+                    """), {"n": f"%{clinic['name']}%"}).mappings().all()
+            except Exception:
+                rows = []
+    items = [{"key": str(r["review_id"]), "demo": False, "doctor_name": r["doctor_name"], "clinic": r["clinic___hospital"],
+              "rating": r["overall_rating"], "text": r["review_text"], "reviewer": r["reviewer_name"], "date": str(r["time_of_review"] or ""),
+              "sentiment": _sentiment_from(r["overall_rating"], r["sentiment"]), "category": r["category"] or "Uncategorised",
+              "severity": r["severity"], "summary": r["summary"]} for r in rows]
+    if owner_ident.get("show_demo", True):
+        today = _care_date.today()
+        for i, (rating, text_, sent, cat, ago) in enumerate(_DEMO_CLINIC_REVIEWS):
+            items.append({"key": f"cdemo-{i + 1}", "demo": True, "doctor_name": clinic["name"], "clinic": clinic["name"], "rating": rating,
+                          "text": text_, "reviewer": _DEMO_REVIEWERS[-1 - i], "date": (today - timedelta(days=ago)).isoformat(),
+                          "sentiment": sent, "category": cat, "severity": 3 if sent == "negative" else 1,
+                          "summary": f"{sent.capitalize()} feedback about {cat.lower()}."})
+    items.sort(key=lambda i: _review_date(i["date"]) or _care_date(1900, 1, 1), reverse=True)
+    ratings = [float(i["rating"]) for i in items if str(i.get("rating") or "").replace(".", "", 1).isdigit()]
+    return {"clinic": {"name": clinic["name"], "city": clinic.get("city")}, "approved": approved, "items": items,
+            "rating": round(sum(ratings) / len(ratings), 1) if ratings else None,
+            "counts": {k: sum(1 for i in items if i["sentiment"] == k) for k in ("positive", "neutral", "negative")},
+            "reasons": _reasons(items), "is_owner": clinic["owner_sub"] == doctor_sub}
